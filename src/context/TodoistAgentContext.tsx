@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Message, TodoistTask } from "../types";
 import todoistApi from "../services/todoist-api";
@@ -58,7 +59,7 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     }
   }, []);
 
-  // Function to set the API key
+  // Function to set the API key - fixed the duplicate const keyword
   const setApiKey = async (key: string): Promise<boolean> => {
     setIsLoading(true);
     try {
@@ -267,7 +268,7 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     completeTask,
   };
 
-  // Standard Context.Provider pattern instead of render props
+  // Standard Context.Provider pattern
   return (
     <TodoistAgentContext.Provider value={contextValue}>
       {children}
