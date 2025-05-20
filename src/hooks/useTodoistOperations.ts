@@ -141,6 +141,7 @@ export const useTodoistOperations = () => {
 
   return {
     isLoading,
+    setIsLoading, // Add setIsLoading to the return object
     tasks,
     apiKeySet,
     setApiKey,
