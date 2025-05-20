@@ -22,6 +22,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
     if (message.trim() && !isLoading) {
       onSendMessage(message);
       setMessage("");
+      console.log("Message sent:", message); // Add logging
     }
   };
 

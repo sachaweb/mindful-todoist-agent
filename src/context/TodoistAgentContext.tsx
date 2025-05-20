@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Message, TodoistTask } from "../types";
 import todoistApi from "../services/todoist-api";
@@ -37,9 +38,14 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     const hasApiKey = todoistApi.hasApiKey();
     setApiKeySet(hasApiKey);
     
+    console.log("TodoistAgentProvider initialized");
+    
     // Load initial messages from AI service context
     const context = aiService.getContext();
+    console.log("Initial context:", context);
+    
     if (context.recentMessages && context.recentMessages.length > 0) {
+      console.log("Setting initial messages from context:", context.recentMessages);
       setMessages(context.recentMessages);
     } else {
       // Add welcome message if no previous context
@@ -49,6 +55,7 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
         role: "assistant",
         timestamp: new Date(),
       };
+      console.log("Adding welcome message:", welcomeMessage);
       setMessages([welcomeMessage]);
     }
     
@@ -78,6 +85,8 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
           role: "assistant",
           timestamp: new Date(),
         };
+        
+        console.log("Adding API key success message:", newMessage);
         setMessages(prev => [...prev, newMessage]);
         
         toast({
@@ -109,7 +118,11 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
 
   // Function to send a message to the AI
   const sendMessage = async (content: string): Promise<void> => {
-    if (!content.trim()) return;
+    console.log("sendMessage called with:", content);
+    if (!content.trim()) {
+      console.log("Message content empty, not sending");
+      return;
+    }
     
     setIsLoading(true);
     
@@ -121,11 +134,14 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       timestamp: new Date(),
     };
     
+    console.log("Adding user message:", userMessage);
     setMessages(prev => [...prev, userMessage]);
     
     try {
       // Process message with AI service
+      console.log("Calling AI service with:", content);
       const response = await aiService.processMessage(content, tasks);
+      console.log("AI service response:", response);
       
       // Add AI response to state
       const aiMessage: Message = {
@@ -135,6 +151,7 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
         timestamp: new Date(),
       };
       
+      console.log("Adding AI response message:", aiMessage);
       setMessages(prev => [...prev, aiMessage]);
       
       // Refresh tasks in case the message resulted in changes

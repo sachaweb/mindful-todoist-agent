@@ -5,10 +5,16 @@ import MessageInput from "./MessageInput";
 import Suggestions from "./Suggestions";
 import { useTodoistAgent } from "../context/TodoistAgentContext";
 import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const ChatInterface: React.FC = () => {
   const { messages, isLoading, sendMessage, suggestions } = useTodoistAgent();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Log messages for debugging
+  useEffect(() => {
+    console.log("Current messages:", messages);
+  }, [messages]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -17,27 +23,37 @@ const ChatInterface: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 chat-gradient scrollbar-thin">
+      <ScrollArea className="flex-1 p-4 space-y-4 chat-gradient">
         <div className="flex flex-col">
-          {messages.map((message) => (
-            <Message key={message.id} message={message} />
-          ))}
+          {messages && messages.length > 0 ? (
+            messages.map((message) => (
+              <Message key={message.id} message={message} />
+            ))
+          ) : (
+            <div className="text-center text-gray-500 py-8">No messages yet</div>
+          )}
           <div ref={messagesEndRef} />
         </div>
-      </div>
+      </ScrollArea>
       
       <div className="p-4 bg-background border-t">
-        {suggestions.length > 0 && (
+        {suggestions && suggestions.length > 0 && (
           <>
             <Suggestions
               suggestions={suggestions}
-              onSelectSuggestion={sendMessage}
+              onSelectSuggestion={(suggestion) => {
+                console.log("Suggestion selected:", suggestion);
+                sendMessage(suggestion);
+              }}
             />
             <Separator className="my-3" />
           </>
         )}
         <MessageInput
-          onSendMessage={sendMessage}
+          onSendMessage={(content) => {
+            console.log("Sending message from input:", content);
+            sendMessage(content);
+          }}
           isLoading={isLoading}
           placeholder="Ask me about your tasks or type a new task..."
         />

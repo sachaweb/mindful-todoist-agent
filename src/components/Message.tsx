@@ -20,6 +20,9 @@ const Message: React.FC<MessageProps> = ({ message }) => {
     ));
   };
   
+  // Add logging to see if messages are being rendered properly
+  console.log("Rendering message:", message);
+  
   return (
     <div
       className={cn(
@@ -38,7 +41,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
         <div>
           <p className="text-sm text-gray-700">{formatMessage(message.content)}</p>
           <p className="text-xs text-gray-400 mt-1">
-            {message.timestamp.toLocaleTimeString([], {
+            {new Date(message.timestamp).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
             })}
