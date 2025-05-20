@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Message, TodoistTask } from "../types";
 import todoistApi from "../services/todoist-api";
@@ -60,7 +59,7 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
   }, []);
 
   // Function to set the API key
-  const setApiKey = async (key: string): Promise<boolean> => {
+  const const setApiKey = async (key: string): Promise<boolean> => {
     setIsLoading(true);
     try {
       todoistApi.setApiKey(key);

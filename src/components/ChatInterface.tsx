@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect, useContext } from "react";
+import React, { useRef, useEffect } from "react";
 import Message from "./Message";
 import MessageInput from "./MessageInput";
 import Suggestions from "./Suggestions";
@@ -7,7 +7,7 @@ import { TodoistAgentContext } from "../context/TodoistAgentContext";
 import { Separator } from "@/components/ui/separator";
 
 const ChatInterface: React.FC = () => {
-  const context = useContext(TodoistAgentContext);
+  const context = React.useContext(TodoistAgentContext);
   
   if (!context) {
     throw new Error("ChatInterface must be used within TodoistAgentProvider");

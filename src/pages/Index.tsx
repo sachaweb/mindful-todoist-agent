@@ -1,6 +1,6 @@
 
 import React from "react";
-import { TodoistAgentProvider } from "../context/TodoistAgentContext";
+import { TodoistAgentProvider, TodoistAgentContext } from "../context/TodoistAgentContext";
 import ChatInterface from "../components/ChatInterface";
 import ApiKeyForm from "../components/ApiKeyForm";
 import TaskPanel from "../components/TaskPanel";
