@@ -1,9 +1,8 @@
-
 import { Message, TodoistTask, ConversationContext } from "../types";
 
 // This simulates an AI service - in a real implementation, this would connect to an LLM API
 export class AiService {
-  private readonly MAX_CONTEXT_MESSAGES = 5;
+  private readonly MAX_CONTEXT_MESSAGES = 10; // Increased from 5 to provide more context
   private context: ConversationContext = {
     recentMessages: [],
     openTasks: [],
@@ -14,6 +13,8 @@ export class AiService {
   }
 
   public async processMessage(message: string, tasks: TodoistTask[] = []): Promise<string> {
+    console.log("AI service processing message:", message);
+    
     // Add user message to context
     this.addMessageToContext({
       id: this.generateId(),
@@ -33,6 +34,7 @@ export class AiService {
 
     // Process the message and generate a response
     const response = await this.generateResponse(message);
+    console.log("AI service generated response:", response);
 
     // Add AI response to context
     this.addMessageToContext({
@@ -100,6 +102,7 @@ export class AiService {
   }
 
   private addMessageToContext(message: Message): void {
+    console.log("Adding message to context:", message);
     this.context.recentMessages.push(message);
     
     // Keep only the most recent messages
@@ -113,6 +116,45 @@ export class AiService {
   private async generateResponse(message: string): Promise<string> {
     // Enhanced rule-based response system with natural language processing
     const lowerMessage = message.toLowerCase().trim();
+    
+    // Improved context awareness - look at previous messages
+    const recentUserMessages = this.context.recentMessages
+      .filter(msg => msg.role === "user")
+      .slice(-3);
+    
+    const recentAIMessages = this.context.recentMessages
+      .filter(msg => msg.role === "assistant")
+      .slice(-3);
+    
+    console.log("Recent context - User messages:", recentUserMessages);
+    console.log("Recent context - AI messages:", recentAIMessages);
+    
+    // Check if this is a follow-up to a task creation dialogue
+    if (
+      recentAIMessages.length > 0 && 
+      (
+        recentAIMessages[recentAIMessages.length - 1].content.includes("due date") || 
+        recentAIMessages[recentAIMessages.length - 1].content.includes("priority") || 
+        recentAIMessages[recentAIMessages.length - 1].content.includes("labels")
+      )
+    ) {
+      if (
+        lowerMessage.includes("no") || 
+        lowerMessage.includes("not needed") || 
+        lowerMessage.includes("don't need")
+      ) {
+        return "Got it! I'll keep the task as is. Is there anything else you'd like me to do with your tasks today?";
+      }
+      
+      if (lowerMessage.includes("yes") || lowerMessage.includes("high") || lowerMessage.includes("important")) {
+        return "I'll set this task to high priority. Would you like me to add any labels to it as well?";
+      }
+      
+      if (lowerMessage.includes("tomorrow") || lowerMessage.includes("today") || lowerMessage.includes("next week")) {
+        return `I'll set the due date to ${lowerMessage.includes("tomorrow") ? "tomorrow" : 
+          lowerMessage.includes("today") ? "today" : "next week"}. Anything else you'd like to modify?`;
+      }
+    }
     
     // Task Creation
     if (
@@ -207,31 +249,43 @@ export class AiService {
   }
 
   private saveContext(): void {
-    localStorage.setItem("ai_context", JSON.stringify({
-      recentMessages: this.context.recentMessages,
-      lastSuggestion: this.context.lastSuggestion,
-      lastQuery: this.context.lastQuery,
-      // Note: We don't store tasks as they can get stale quickly
-    }));
+    try {
+      localStorage.setItem("ai_context", JSON.stringify({
+        recentMessages: this.context.recentMessages,
+        lastSuggestion: this.context.lastSuggestion,
+        lastQuery: this.context.lastQuery,
+        // Note: We don't store tasks as they can get stale quickly
+      }));
+      console.log("Context saved successfully");
+    } catch (error) {
+      console.error("Error saving context:", error);
+    }
   }
 
   private loadContext(): void {
-    const storedContext = localStorage.getItem("ai_context");
-    if (storedContext) {
-      const parsedContext = JSON.parse(storedContext);
-      
-      // Restore timestamps as Date objects
-      if (parsedContext.recentMessages) {
-        parsedContext.recentMessages.forEach((msg: any) => {
-          msg.timestamp = new Date(msg.timestamp);
-        });
+    try {
+      const storedContext = localStorage.getItem("ai_context");
+      if (storedContext) {
+        const parsedContext = JSON.parse(storedContext);
+        
+        // Restore timestamps as Date objects
+        if (parsedContext.recentMessages) {
+          parsedContext.recentMessages.forEach((msg: any) => {
+            msg.timestamp = new Date(msg.timestamp);
+          });
+        }
+        
+        this.context = {
+          ...this.context,
+          ...parsedContext,
+          openTasks: [], // Always fetch fresh tasks
+        };
+        console.log("Context loaded successfully:", this.context);
+      } else {
+        console.log("No stored context found");
       }
-      
-      this.context = {
-        ...this.context,
-        ...parsedContext,
-        openTasks: [], // Always fetch fresh tasks
-      };
+    } catch (error) {
+      console.error("Error loading context:", error);
     }
   }
 
