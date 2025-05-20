@@ -19,27 +19,34 @@ const TodoistAgentApp: React.FC = () => {
 
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         <TodoistAgentProvider>
-          {({ apiKeySet, isLoading, setApiKey }) => (
-            <>
-              {!apiKeySet ? (
-                <div className="flex-1 flex items-center justify-center p-4">
-                  <ApiKeyForm onSubmit={setApiKey} isLoading={isLoading} />
-                </div>
-              ) : (
-                <>
-                  <div className="flex-1 md:w-3/4 h-full md:border-r overflow-hidden">
-                    <ChatInterface />
-                  </div>
-                  <div className="w-full md:w-1/4 p-4 overflow-auto">
-                    <TaskPanel />
-                  </div>
-                </>
-              )}
-            </>
-          )}
+          <MainContent />
         </TodoistAgentProvider>
       </div>
     </div>
+  );
+};
+
+// Separate component to use the context
+const MainContent: React.FC = () => {
+  const { apiKeySet, isLoading, setApiKey } = React.useContext(TodoistAgentContext)!;
+  
+  return (
+    <>
+      {!apiKeySet ? (
+        <div className="flex-1 flex items-center justify-center p-4">
+          <ApiKeyForm onSubmit={setApiKey} isLoading={isLoading} />
+        </div>
+      ) : (
+        <>
+          <div className="flex-1 md:w-3/4 h-full md:border-r overflow-hidden">
+            <ChatInterface />
+          </div>
+          <div className="w-full md:w-1/4 p-4 overflow-auto">
+            <TaskPanel />
+          </div>
+        </>
+      )}
+    </>
   );
 };
 

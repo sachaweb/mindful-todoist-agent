@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Message, TodoistTask } from "../types";
 import todoistApi from "../services/todoist-api";
@@ -18,7 +19,7 @@ interface TodoistAgentContextProps {
 }
 
 interface TodoistAgentProviderProps {
-  children: (contextValue: TodoistAgentContextProps) => React.ReactNode;
+  children: ReactNode;
 }
 
 // Make sure to export the context
@@ -267,10 +268,10 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     completeTask,
   };
 
-  // Use the render prop pattern
+  // Standard Context.Provider pattern instead of render props
   return (
     <TodoistAgentContext.Provider value={contextValue}>
-      {children(contextValue)}
+      {children}
     </TodoistAgentContext.Provider>
   );
 };
