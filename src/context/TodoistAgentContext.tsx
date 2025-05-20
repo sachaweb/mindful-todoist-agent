@@ -59,7 +59,7 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
   }, []);
 
   // Function to set the API key
-  const const setApiKey = async (key: string): Promise<boolean> => {
+  const setApiKey = async (key: string): Promise<boolean> => {
     setIsLoading(true);
     try {
       todoistApi.setApiKey(key);
