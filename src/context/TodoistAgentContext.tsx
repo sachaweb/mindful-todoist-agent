@@ -153,7 +153,19 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       if (content) {
         try {
           console.log(`Creating task: "${content}", due: "${dueDate}", priority: ${priority}, labels: [${labels.join(", ")}]`);
-          await createTask(content, dueDate, priority, labels);
+          const success = await createTask(content, dueDate, priority, labels);
+          
+          if (success) {
+            // Add a confirmation message to the chat
+            const confirmationMessage: Message = {
+              id: Math.random().toString(36).substring(2, 11),
+              content: `✅ Task "${content}" has been created${dueDate ? ` with due date ${dueDate}` : ''}.`,
+              role: "assistant",
+              timestamp: new Date(),
+            };
+            
+            setMessages(prev => [...prev, confirmationMessage]);
+          }
         } catch (error) {
           console.error("Error creating task from AI intent:", error);
         }
@@ -171,9 +183,12 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     
     setIsLoading(true);
     
+    // Generate unique ID for this message
+    const messageId = Math.random().toString(36).substring(2, 11);
+    
     // Add user message to state
     const userMessage: Message = {
-      id: Math.random().toString(36).substring(2, 11),
+      id: messageId,
       content,
       role: "user",
       timestamp: new Date(),
@@ -182,6 +197,12 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     console.log("Adding user message to state:", userMessage);
     setMessages(prev => {
       console.log("Previous messages:", prev);
+      // Check if this message already exists to prevent duplicates
+      const messageExists = prev.some(m => m.content === content && m.role === "user");
+      if (messageExists) {
+        console.log("Message already exists, not adding duplicate");
+        return prev;
+      }
       const updatedMessages = [...prev, userMessage];
       console.log("Updated messages:", updatedMessages);
       return updatedMessages;

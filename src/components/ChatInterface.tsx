@@ -28,12 +28,17 @@ const ChatInterface: React.FC = () => {
     sendMessage(content);
   };
 
+  // Ensure unique messages by ID
+  const uniqueMessages = messages.filter((message, index, self) => 
+    index === self.findIndex((m) => m.id === message.id)
+  );
+
   return (
     <div className="flex flex-col h-full">
       <ScrollArea className="flex-1 p-4 space-y-4 chat-gradient">
         <div className="flex flex-col">
-          {messages && messages.length > 0 ? (
-            messages.map((message) => (
+          {uniqueMessages && uniqueMessages.length > 0 ? (
+            uniqueMessages.map((message) => (
               <Message key={message.id} message={message} />
             ))
           ) : (
