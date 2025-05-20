@@ -1,16 +1,10 @@
 
 import React from "react";
 import TaskList from "./TaskList";
-import { TodoistAgentContext } from "../context/TodoistAgentContext";
+import { useTodoistAgent } from "../context/TodoistAgentContext";
 
 const TaskPanel: React.FC = () => {
-  const context = React.useContext(TodoistAgentContext);
-  
-  if (!context) {
-    throw new Error("TaskPanel must be used within TodoistAgentProvider");
-  }
-  
-  const { tasks, isLoading, refreshTasks, completeTask } = context;
+  const { tasks, isLoading, refreshTasks, completeTask } = useTodoistAgent();
 
   return (
     <div>

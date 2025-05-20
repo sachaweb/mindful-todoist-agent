@@ -1,6 +1,6 @@
 
 import React from "react";
-import { TodoistAgentProvider, TodoistAgentContext } from "../context/TodoistAgentContext";
+import { TodoistAgentProvider, useTodoistAgent } from "../context/TodoistAgentContext";
 import ChatInterface from "../components/ChatInterface";
 import ApiKeyForm from "../components/ApiKeyForm";
 import TaskPanel from "../components/TaskPanel";
@@ -28,7 +28,7 @@ const TodoistAgentApp: React.FC = () => {
 
 // Separate component to use the context
 const MainContent: React.FC = () => {
-  const { apiKeySet, isLoading, setApiKey } = React.useContext(TodoistAgentContext)!;
+  const { apiKeySet, isLoading, setApiKey } = useTodoistAgent();
   
   return (
     <>
