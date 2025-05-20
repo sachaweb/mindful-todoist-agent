@@ -4,6 +4,7 @@ export interface Message {
   content: string;
   role: 'user' | 'assistant';
   timestamp: Date;
+  status?: 'sending' | 'sent' | 'error';
 }
 
 export interface TodoistTask {
@@ -24,6 +25,7 @@ export interface ConversationContext {
   recentMessages: Message[];
   openTasks?: TodoistTask[];
   lastSuggestion?: string;
+  lastQuery?: string;
 }
 
 export interface TodoistApiResponse {

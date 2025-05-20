@@ -13,8 +13,10 @@ const Message: React.FC<MessageProps> = ({ message }) => {
   return (
     <div
       className={cn(
-        "p-4 max-w-[85%] mb-4",
-        isUser ? "message-user self-end" : "message-ai self-start"
+        "p-4 rounded-lg mb-4 max-w-[85%]",
+        isUser 
+          ? "bg-gray-100 self-end text-gray-900" 
+          : "bg-todoist-red/10 self-start"
       )}
     >
       <div className="flex items-start">

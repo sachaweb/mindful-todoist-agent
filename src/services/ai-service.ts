@@ -1,3 +1,4 @@
+
 import { Message, TodoistTask, ConversationContext } from "../types";
 
 // This simulates an AI service - in a real implementation, this would connect to an LLM API
@@ -107,33 +108,53 @@ export class AiService {
   }
 
   private async generateResponse(message: string): Promise<string> {
-    // In a real implementation, this would call an LLM API
-    // Here we'll use a simple rule-based approach for the MVP
-    
+    // Enhanced rule-based response system
     const lowerMessage = message.toLowerCase();
+    
+    // Handle questions about bundling or grouping tasks
+    if (lowerMessage.includes("bundle") || lowerMessage.includes("group") || lowerMessage.includes("batch")) {
+      return "To bundle similar tasks together, I can help you identify tasks with similar themes. Would you like me to group your tasks by category, priority, or due date?";
+    }
+    
+    // Handle task retrieval requests
+    if (lowerMessage.includes("retrieve") || lowerMessage.includes("show") || lowerMessage.includes("display") || lowerMessage.includes("list tasks") || lowerMessage.includes("my tasks")) {
+      return "I've refreshed your task list. You can see your tasks in the panel on the right. Would you like me to help you organize them in any specific way?";
+    }
     
     // Handle task creation
     if (lowerMessage.includes("add task") || lowerMessage.includes("create task") || lowerMessage.startsWith("add ")) {
-      return "I'll help you add that task. What details would you like to include?";
+      return "I'll help you add that task. What details would you like to include? You can specify a due date, priority level, or project.";
     }
     
     // Handle task completion
     if (lowerMessage.includes("complete") || lowerMessage.includes("mark as done") || lowerMessage.includes("finish task")) {
-      return "I'll mark that task as complete for you.";
+      return "I'll mark that task as complete for you. You can also complete tasks directly from the task panel on the right by clicking the checkmark button.";
     }
     
-    // Handle task listing
-    if (lowerMessage.includes("show tasks") || lowerMessage.includes("list tasks") || lowerMessage.includes("my tasks")) {
-      return "Here are your current tasks. Would you like me to help you organize them?";
+    // Handle prioritization requests
+    if (lowerMessage.includes("prioritize") || lowerMessage.includes("important") || lowerMessage.includes("urgent")) {
+      return "I can help you prioritize your tasks. Would you like to sort them by due date, importance, or difficulty?";
+    }
+    
+    // Handle scheduling queries
+    if (lowerMessage.includes("schedule") || lowerMessage.includes("when") || lowerMessage.includes("time")) {
+      return "I can help you schedule your tasks. Would you like me to suggest time blocks for your tasks based on their priority and estimated duration?";
     }
     
     // Handle help requests
     if (lowerMessage.includes("help") || lowerMessage.includes("what can you do")) {
-      return "I can help you manage your Todoist tasks. Try asking me to create tasks, complete tasks, or suggest ways to organize your task list.";
+      return "I can help you manage your Todoist tasks in several ways:\n- Create tasks with natural language\n- Complete tasks\n- Organize and prioritize your task list\n- Bundle similar tasks together\n- Suggest time management strategies\n\nJust let me know what you'd like assistance with!";
     }
     
-    // Default response
-    return "I'm your Todoist assistant. I can help you create, update and complete tasks, as well as suggest ways to organize them. What would you like to do?";
+    // Default varying responses
+    const defaultResponses = [
+      "I'm here to help with your tasks. Would you like to create a new task, view your current ones, or get some organizational suggestions?",
+      "How can I assist with your task management today? I can help create, organize, or complete tasks.",
+      "I'm your Todoist assistant. Let me know if you'd like to add a task, review your current tasks, or get productivity suggestions.",
+      "Is there a specific aspect of your task management I can help with today?"
+    ];
+    
+    return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
   }
 
   private saveContext(): void {
