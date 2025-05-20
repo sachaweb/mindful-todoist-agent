@@ -20,8 +20,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
     ));
   };
   
-  // Add logging to see if messages are being rendered properly
-  console.log("Rendering message:", message);
+  console.log("Rendering message:", message.id, message.content, message.role);
   
   return (
     <div
@@ -31,6 +30,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
           ? "bg-gray-100 self-end text-gray-900" 
           : "bg-todoist-red/10 self-start"
       )}
+      data-testid={`message-${message.id}`}
     >
       <div className="flex items-start">
         {!isUser && (

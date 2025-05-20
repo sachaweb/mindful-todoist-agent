@@ -18,7 +18,9 @@ const ChatInterface: React.FC = () => {
 
   // Scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   const handleSendMessage = (content: string) => {
@@ -46,10 +48,7 @@ const ChatInterface: React.FC = () => {
           <>
             <Suggestions
               suggestions={suggestions}
-              onSelectSuggestion={(suggestion) => {
-                console.log("Suggestion selected:", suggestion);
-                handleSendMessage(suggestion);
-              }}
+              onSelectSuggestion={handleSendMessage}
             />
             <Separator className="my-3" />
           </>
