@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect } from "react";
 import { Message } from "../types";
 import aiService from "../services/ai-service";
@@ -12,6 +13,7 @@ export const TodoistAgentContext = createContext<TodoistAgentContextProps | unde
 export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ children }) => {
   const {
     isLoading, 
+    setIsLoading, // Make sure we add this from useTodoistOperations
     tasks, 
     apiKeySet, 
     setApiKey: setTodoistApiKey, 
