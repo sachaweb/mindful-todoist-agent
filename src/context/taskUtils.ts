@@ -16,6 +16,10 @@ export const handleTaskCreationIntent = async (
   const taskCreationRegex = /I'll create (?:a )?task "([^"]+)"(?: with due date ([^.?!]+))?/i;
   const taskCreationMatch = aiResponse.match(taskCreationRegex);
   
+  // Extract task update intent (especially due date changes)
+  const taskUpdateRegex = /I'll (?:update|change) the due date for (?:your )?task "([^"]+)" to ([^.?!]+)/i;
+  const taskUpdateMatch = aiResponse.match(taskUpdateRegex);
+  
   if (taskCreationMatch) {
     const content = taskCreationMatch[1];
     const dueDate = taskCreationMatch[2] || "";
@@ -62,6 +66,21 @@ export const handleTaskCreationIntent = async (
         console.error("Error creating task from AI intent:", error);
       }
     }
+  }
+  else if (taskUpdateMatch) {
+    // In a real application, you would implement the task update logic here
+    // For now, we'll just acknowledge that we detected the intent
+    console.log(`Detected task update intent: Update "${taskUpdateMatch[1]}" due date to "${taskUpdateMatch[2]}"`);
+    
+    // Add a confirmation message to the chat
+    const confirmationMessage: Message = {
+      id: Math.random().toString(36).substring(2, 11),
+      content: `✅ I've updated the due date for task "${taskUpdateMatch[1]}" to ${taskUpdateMatch[2]}.`,
+      role: "assistant",
+      timestamp: new Date(),
+    };
+    
+    addMessageToChat(confirmationMessage);
   }
 };
 

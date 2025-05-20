@@ -244,8 +244,38 @@ export class AiService {
       }
     }
     
-    // Task Update
+    // IMPROVED TASK UPDATE DETECTION
+    // Better detection for changing due dates
+    const updateDueDateRegex = /(?:update|change|set|modify|make|reschedule|move)\s+(?:the\s+)?(?:due\s+date|deadline)\s+(?:of|for)?\s+(?:(?:the\s+)?(?:task|to-do|todo))?\s*(?:["']([^"']+)["']|([^"'\s]+(?:\s+[^"'\s]+)*))\s+(?:to\s+)?(?:be\s+)?(?:due\s+)?(?:on|for|to)\s+(\w+(?:\s+\w+)*)/i;
+    const updateTaskDueRegex = /(?:update|change|set|modify|make|reschedule|move)\s+(?:the\s+)?(?:task|to-do|todo)\s+(?:["']([^"']+)["']|([^"'\s]+(?:\s+[^"'\s]+)*))\s+(?:to\s+be\s+)?(?:due\s+)?(?:on|for|to)\s+(\w+(?:\s+\w+)*)/i;
+    
+    // Check both regex patterns
+    const dueDateMatch = updateDueDateRegex.exec(message) || updateTaskDueRegex.exec(message);
+    
+    if (dueDateMatch) {
+      const taskName = dueDateMatch[1] || dueDateMatch[2] || "";
+      const newDueDate = dueDateMatch[3] || "";
+      
+      if (taskName && newDueDate) {
+        console.log(`Detected due date change: Task "${taskName}" to "${newDueDate}"`);
+        return `I'll update the due date for your task "${taskName}" to ${newDueDate}. Would you like me to make any other changes to this task?`;
+      }
+    }
+    
+    // Task Update - general case
     if (lowerMessage.includes("update") || lowerMessage.includes("change") || lowerMessage.includes("edit")) {
+      // Check if it mentions "due date" specifically
+      if (lowerMessage.includes("due date") || lowerMessage.includes("deadline") || lowerMessage.includes("due on")) {
+        // Extract possible task name and date
+        const taskMatch = /(?:task|todo|to-do)\s+(?:["']([^"']+)["']|([^"'\s]+(?:\s+[^"'\s]+)*))/i.exec(message);
+        const dateMatch = /(?:to|on|for)\s+(\w+(?:\s+\w+)*?)(?:\.|\?|$)/i.exec(message);
+        
+        const taskName = (taskMatch && (taskMatch[1] || taskMatch[2])) || "the task you mentioned";
+        const dueDate = (dateMatch && dateMatch[1]) || "the new date";
+        
+        return `I'll change the due date for your task "${taskName}" to ${dueDate}. Is there anything else you'd like me to update?`;
+      }
+      
       return "I'll help you update that task. Which part would you like to change? The due date, priority, or description?";
     }
     

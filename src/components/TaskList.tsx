@@ -2,7 +2,7 @@
 import React from "react";
 import { TodoistTask } from "../types";
 import { Button } from "@/components/ui/button";
-import { Check } from "lucide-react";
+import { Check, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TaskListProps {
@@ -49,9 +49,22 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onCompleteTask, isLoading })
           <div className="flex-1 mr-2">
             <p className="text-sm font-medium">{task.content}</p>
             {task.due && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
                 {task.due.string || task.due.date}
               </p>
+            )}
+            {task.labels && task.labels.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {task.labels.map((label) => (
+                  <span 
+                    key={label} 
+                    className="px-1.5 py-0.5 rounded-full text-xs bg-gray-200 text-gray-700"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
           <Button
