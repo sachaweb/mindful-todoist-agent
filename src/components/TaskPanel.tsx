@@ -24,7 +24,7 @@ const TaskPanel: React.FC = () => {
           {isLoading ? "Loading..." : "Refresh"}
         </button>
       </div>
-      <TaskList tasks={tasks} onCompleteTask={completeTask} />
+      <TaskList tasks={tasks} onCompleteTask={completeTask} isLoading={isLoading} />
     </div>
   );
 };

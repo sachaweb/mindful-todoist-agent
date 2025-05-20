@@ -21,7 +21,8 @@ interface TodoistAgentProviderProps {
   children: (contextValue: TodoistAgentContextProps) => React.ReactNode;
 }
 
-const TodoistAgentContext = createContext<TodoistAgentContextProps | undefined>(undefined);
+// Make sure to export the context
+export const TodoistAgentContext = createContext<TodoistAgentContextProps | undefined>(undefined);
 
 export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ children }) => {
   const [messages, setMessages] = useState<Message[]>([]);
