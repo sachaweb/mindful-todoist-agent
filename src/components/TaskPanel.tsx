@@ -10,12 +10,17 @@ const TaskPanel: React.FC = () => {
     console.log("TaskPanel rendered with tasks:", tasks);
   }, [tasks]);
 
+  const handleRefresh = () => {
+    console.log("Manually refreshing tasks");
+    refreshTasks();
+  };
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Your Tasks</h2>
         <button
-          onClick={refreshTasks}
+          onClick={handleRefresh}
           className="text-xs text-gray-500 hover:text-todoist-red flex items-center"
           disabled={isLoading}
         >

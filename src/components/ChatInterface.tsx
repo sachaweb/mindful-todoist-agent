@@ -33,6 +33,9 @@ const ChatInterface: React.FC = () => {
     index === self.findIndex((m) => m.id === message.id)
   );
 
+  // Only disable input when actually sending a message, not during other loading states
+  const isSendingMessage = isLoading && messages.some(m => m.status === 'sending');
+
   return (
     <div className="flex flex-col h-full">
       <ScrollArea className="flex-1 p-4 space-y-4 chat-gradient">
@@ -60,7 +63,7 @@ const ChatInterface: React.FC = () => {
         )}
         <MessageInput
           onSendMessage={handleSendMessage}
-          isLoading={isLoading}
+          isLoading={isSendingMessage}
           placeholder="Ask me about your tasks or type a new task..."
         />
       </div>

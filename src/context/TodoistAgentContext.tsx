@@ -13,7 +13,7 @@ export const TodoistAgentContext = createContext<TodoistAgentContextProps | unde
 export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ children }) => {
   const {
     isLoading, 
-    setIsLoading, // Make sure we add this from useTodoistOperations
+    setIsLoading,
     tasks, 
     apiKeySet, 
     setApiKey: setTodoistApiKey, 
@@ -38,9 +38,13 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     
     // If API key is set, fetch tasks
     if (apiKeySet) {
-      refreshTasks();
+      refreshTasks().catch(error => {
+        console.error("Failed to refresh tasks during initialization:", error);
+        // Don't get stuck in loading state
+        setIsLoading(false);
+      });
     }
-  }, [apiKeySet, initializeMessages, refreshTasks]);
+  }, [apiKeySet, initializeMessages, refreshTasks, setIsLoading]);
 
   // Update suggestions when tasks change
   useEffect(() => {
@@ -93,11 +97,25 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     console.log("Adding user message to state:", userMessage);
     addMessage(userMessage);
     
+    // Prepare AI response message with sending status
+    const pendingAiMessage: Message = {
+      id: Math.random().toString(36).substring(2, 11),
+      content: "",
+      role: "assistant",
+      timestamp: new Date(),
+      status: "sending"
+    };
+    
+    addMessage(pendingAiMessage);
+    
     try {
       // Process message with AI service
       console.log("Calling AI service with:", content);
       const response = await aiService.processMessage(content, tasks);
       console.log("AI service response:", response);
+      
+      // Remove the pending message and add the real response
+      setMessages(prev => prev.filter(msg => msg.id !== pendingAiMessage.id));
       
       // Add AI response to state
       const aiMessage: Message = {
@@ -117,6 +135,19 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       }
     } catch (error) {
       console.error("Error processing message:", error);
+      
+      // Remove the pending message
+      setMessages(prev => prev.filter(msg => msg.id !== pendingAiMessage.id));
+      
+      // Add error message
+      const errorMessage: Message = {
+        id: Math.random().toString(36).substring(2, 11),
+        content: "Sorry, I encountered an error processing your message. Please try again.",
+        role: "assistant",
+        timestamp: new Date(),
+      };
+      
+      addMessage(errorMessage);
     } finally {
       setIsLoading(false);
     }

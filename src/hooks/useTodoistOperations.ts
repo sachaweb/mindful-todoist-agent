@@ -31,6 +31,7 @@ export const useTodoistOperations = () => {
         
         return true;
       } else {
+        todoistApi.setApiKey(''); // Clear the invalid API key
         toast({
           title: "Error",
           description: "Invalid Todoist API key. Please check and try again.",
@@ -40,6 +41,7 @@ export const useTodoistOperations = () => {
       }
     } catch (error) {
       console.error("Error setting API key:", error);
+      todoistApi.setApiKey(''); // Clear the API key on error
       toast({
         title: "Error",
         description: "Failed to set Todoist API key. Please try again.",
@@ -66,6 +68,8 @@ export const useTodoistOperations = () => {
         description: "Failed to fetch your tasks. Please try again.",
         variant: "destructive",
       });
+      // Set empty tasks array to prevent UI from being stuck
+      setTasks([]);
     } finally {
       setIsLoading(false);
     }
