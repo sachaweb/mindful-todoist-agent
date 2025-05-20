@@ -21,11 +21,18 @@ export interface TodoistTask {
   project_id?: string;
 }
 
+export interface TaskCreationState {
+  taskContent: string;
+  dueDate: string;
+  waitingFor: 'dueDate' | 'priorityOrLabels' | 'labelConfirmation';
+}
+
 export interface ConversationContext {
   recentMessages: Message[];
   openTasks?: TodoistTask[];
   lastSuggestion?: string;
   lastQuery?: string;
+  taskCreationState: TaskCreationState | null;
 }
 
 export interface TodoistApiResponse {

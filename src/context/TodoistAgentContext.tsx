@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Message, TodoistTask } from "../types";
 import todoistApi from "../services/todoist-api";
@@ -116,6 +115,52 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     }
   };
 
+  // Function to detect and handle task creation intent from AI response
+  const handleTaskCreationIntent = async (aiResponse: string, userMessage: string) => {
+    console.log("Checking for task creation intent in:", aiResponse);
+    
+    // Extract task content and due date from AI response using regex
+    // Example: "I'll create a task "Buy groceries" with due date tomorrow."
+    const taskCreationRegex = /I'll create (?:a )?task "([^"]+)"(?: with due date ([^.?!]+))?/i;
+    const taskCreationMatch = aiResponse.match(taskCreationRegex);
+    
+    if (taskCreationMatch) {
+      const content = taskCreationMatch[1];
+      const dueDate = taskCreationMatch[2] || "";
+      let priority = 1; // Default priority
+      
+      console.log(`Detected task creation intent: "${content}" due: "${dueDate}"`);
+      
+      // Check if high priority was mentioned
+      if (aiResponse.toLowerCase().includes("high priority")) {
+        priority = 4;
+      }
+      
+      // Extract labels if mentioned
+      const labels: string[] = [];
+      if (aiResponse.toLowerCase().includes("labels")) {
+        // This is a simplistic implementation - in a real app, you'd want more 
+        // sophisticated logic to extract actual labels
+        const labelRegex = /labels? ([\w\s,]+)/i;
+        const labelMatch = aiResponse.match(labelRegex);
+        if (labelMatch) {
+          const labelText = labelMatch[1];
+          labels.push(...labelText.split(",").map(l => l.trim()));
+        }
+      }
+      
+      // Create the task
+      if (content) {
+        try {
+          console.log(`Creating task: "${content}", due: "${dueDate}", priority: ${priority}, labels: [${labels.join(", ")}]`);
+          await createTask(content, dueDate, priority, labels);
+        } catch (error) {
+          console.error("Error creating task from AI intent:", error);
+        }
+      }
+    }
+  };
+
   // Function to send a message to the AI
   const sendMessage = async (content: string): Promise<void> => {
     console.log("sendMessage called with:", content);
@@ -159,8 +204,9 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       console.log("Adding AI response message:", aiMessage);
       setMessages(prev => [...prev, aiMessage]);
       
-      // Refresh tasks in case the message resulted in changes
+      // Check if the AI intended to create a task
       if (apiKeySet) {
+        await handleTaskCreationIntent(response, content);
         await refreshTasks();
       }
     } catch (error) {

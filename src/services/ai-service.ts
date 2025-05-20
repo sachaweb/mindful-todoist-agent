@@ -1,3 +1,4 @@
+
 import { Message, TodoistTask, ConversationContext } from "../types";
 
 // This simulates an AI service - in a real implementation, this would connect to an LLM API
@@ -6,6 +7,7 @@ export class AiService {
   private context: ConversationContext = {
     recentMessages: [],
     openTasks: [],
+    taskCreationState: null, // Track the state of task creation
   };
 
   constructor() {
@@ -128,35 +130,82 @@ export class AiService {
     
     console.log("Recent context - User messages:", recentUserMessages);
     console.log("Recent context - AI messages:", recentAIMessages);
+    console.log("Current task creation state:", this.context.taskCreationState);
     
-    // Check if this is a follow-up to a task creation dialogue
-    if (
-      recentAIMessages.length > 0 && 
-      (
-        recentAIMessages[recentAIMessages.length - 1].content.includes("due date") || 
-        recentAIMessages[recentAIMessages.length - 1].content.includes("priority") || 
-        recentAIMessages[recentAIMessages.length - 1].content.includes("labels")
-      )
-    ) {
-      if (
-        lowerMessage.includes("no") || 
-        lowerMessage.includes("not needed") || 
-        lowerMessage.includes("don't need")
-      ) {
-        return "Got it! I'll keep the task as is. Is there anything else you'd like me to do with your tasks today?";
+    // Check if we're in the middle of creating a task
+    if (this.context.taskCreationState) {
+      console.log("Processing message in task creation flow", this.context.taskCreationState);
+      const { taskContent, dueDate, waitingFor } = this.context.taskCreationState;
+      
+      // Handle response to priority/labels question
+      if (waitingFor === 'priorityOrLabels') {
+        // If user says no, complete the task creation
+        if (['no', 'nope', 'not needed', 'don\'t need', 'not necessary'].includes(lowerMessage)) {
+          // Reset task creation state
+          this.context.taskCreationState = null;
+          return `Great! I'll create your task "${taskContent}"${dueDate ? ` with due date ${dueDate}` : ''} without additional priority or labels. The task has been added to your Todoist.`;
+        }
+        
+        // If user says yes or provides priority info
+        if (lowerMessage.includes('yes') || lowerMessage.includes('high') || lowerMessage.includes('important')) {
+          this.context.taskCreationState.waitingFor = 'labelConfirmation';
+          return `I'll set this task to high priority. Would you like me to add any labels to it as well?`;
+        }
+        
+        // If user provides label info directly
+        if (lowerMessage.includes('label') || lowerMessage.includes('tag')) {
+          // Reset task creation state - task is complete
+          this.context.taskCreationState = null;
+          return `I've created your task "${taskContent}"${dueDate ? ` with due date ${dueDate}` : ''} and added the labels you requested. The task has been added to your Todoist.`;
+        }
       }
       
-      if (lowerMessage.includes("yes") || lowerMessage.includes("high") || lowerMessage.includes("important")) {
-        return "I'll set this task to high priority. Would you like me to add any labels to it as well?";
+      // Handle response to label question
+      if (waitingFor === 'labelConfirmation') {
+        // Reset task creation state - we're done with the task
+        this.context.taskCreationState = null;
+        
+        if (['no', 'nope', 'not needed', 'don\'t need', 'not necessary'].includes(lowerMessage)) {
+          return `Got it! I've created your task "${taskContent}"${dueDate ? ` with due date ${dueDate}` : ''} with high priority but no labels. The task has been added to your Todoist.`;
+        }
+        
+        return `Perfect! I've created your task "${taskContent}"${dueDate ? ` with due date ${dueDate}` : ''} with high priority and the labels you requested. The task has been added to your Todoist.`;
       }
       
-      if (lowerMessage.includes("tomorrow") || lowerMessage.includes("today") || lowerMessage.includes("next week")) {
-        return `I'll set the due date to ${lowerMessage.includes("tomorrow") ? "tomorrow" : 
-          lowerMessage.includes("today") ? "today" : "next week"}. Anything else you'd like to modify?`;
+      // Handle response to due date question
+      if (waitingFor === 'dueDate') {
+        let extractedDueDate = '';
+        
+        if (lowerMessage.includes('tomorrow')) {
+          extractedDueDate = 'tomorrow';
+        } else if (lowerMessage.includes('today')) {
+          extractedDueDate = 'today';
+        } else if (lowerMessage.includes('next week')) {
+          extractedDueDate = 'next week';
+        } else if (['no', 'nope', 'not needed', 'don\'t need', 'not necessary'].includes(lowerMessage)) {
+          // User doesn't want to set a due date
+          this.context.taskCreationState = {
+            taskContent,
+            dueDate: '',
+            waitingFor: 'priorityOrLabels'
+          };
+          return `No problem. Would you like to set a priority or add labels to this task?`;
+        } else {
+          extractedDueDate = 'the date you specified';
+        }
+        
+        // Update task state and ask about priority
+        this.context.taskCreationState = {
+          taskContent,
+          dueDate: extractedDueDate,
+          waitingFor: 'priorityOrLabels'
+        };
+        
+        return `I'll create a task "${taskContent}" with due date ${extractedDueDate}. Would you like to add any priority or labels?`;
       }
     }
     
-    // Task Creation
+    // Task Creation - start of flow
     if (
       lowerMessage.includes("create") || 
       lowerMessage.includes("add") || 
@@ -177,9 +226,20 @@ export class AiService {
         dueDate = "next week";
       }
       
+      // Start the task creation flow by tracking state
       if (dueDate) {
+        this.context.taskCreationState = {
+          taskContent,
+          dueDate,
+          waitingFor: 'priorityOrLabels'
+        };
         return `I'll create a task "${taskContent}" with due date ${dueDate}. Would you like to add any priority or labels?`;
       } else {
+        this.context.taskCreationState = {
+          taskContent,
+          dueDate: '',
+          waitingFor: 'dueDate'
+        };
         return `I'll create a task "${taskContent}". Would you like to set a due date for this task?`;
       }
     }
@@ -232,11 +292,6 @@ export class AiService {
       return "I can help you manage your Todoist tasks in several ways:\n- Create new tasks\n- Update existing tasks\n- Complete tasks\n- List and organize your tasks\n- Group similar tasks together\n- Provide productivity suggestions\n\nJust tell me what you'd like to do!";
     }
     
-    // Analyze previous context to improve response
-    if (this.context.lastQuery && this.context.lastQuery.toLowerCase().includes("create")) {
-      return "I'll add that task for you. Is there anything else you'd like me to do with your tasks today?";
-    }
-
     // Default varying responses
     const defaultResponses = [
       "I'm here to help manage your Todoist tasks. What would you like me to help you with today?",
@@ -254,7 +309,7 @@ export class AiService {
         recentMessages: this.context.recentMessages,
         lastSuggestion: this.context.lastSuggestion,
         lastQuery: this.context.lastQuery,
-        // Note: We don't store tasks as they can get stale quickly
+        taskCreationState: this.context.taskCreationState,
       }));
       console.log("Context saved successfully");
     } catch (error) {
