@@ -1,10 +1,14 @@
 
-import React from "react";
+import React, { useEffect } from "react";
 import TaskList from "./TaskList";
 import { useTodoistAgent } from "../context/TodoistAgentContext";
 
 const TaskPanel: React.FC = () => {
   const { tasks, isLoading, refreshTasks, completeTask } = useTodoistAgent();
+  
+  useEffect(() => {
+    console.log("TaskPanel rendered with tasks:", tasks);
+  }, [tasks]);
 
   return (
     <div>

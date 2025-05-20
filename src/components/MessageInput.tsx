@@ -20,9 +20,10 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (message.trim() && !isLoading) {
+      console.log("Submitting message:", message);
       onSendMessage(message);
       setMessage("");
-      console.log("Message sent:", message); // Add logging
+      console.log("Message sent, input cleared");
     }
   };
 

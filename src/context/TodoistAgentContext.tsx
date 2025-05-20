@@ -65,7 +65,7 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     }
   }, []);
 
-  // Function to set the API key - fixing the duplicate const keyword
+  // Function to set the API key
   const setApiKey = async (key: string): Promise<boolean> => {
     setIsLoading(true);
     try {
@@ -134,8 +134,13 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       timestamp: new Date(),
     };
     
-    console.log("Adding user message:", userMessage);
-    setMessages(prev => [...prev, userMessage]);
+    console.log("Adding user message to state:", userMessage);
+    setMessages(prev => {
+      console.log("Previous messages:", prev);
+      const updatedMessages = [...prev, userMessage];
+      console.log("Updated messages:", updatedMessages);
+      return updatedMessages;
+    });
     
     try {
       // Process message with AI service

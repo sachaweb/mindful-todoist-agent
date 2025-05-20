@@ -13,13 +13,18 @@ const ChatInterface: React.FC = () => {
   
   // Log messages for debugging
   useEffect(() => {
-    console.log("Current messages:", messages);
+    console.log("Current messages in ChatInterface:", messages);
   }, [messages]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleSendMessage = (content: string) => {
+    console.log("ChatInterface - handleSendMessage called with:", content);
+    sendMessage(content);
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -43,17 +48,14 @@ const ChatInterface: React.FC = () => {
               suggestions={suggestions}
               onSelectSuggestion={(suggestion) => {
                 console.log("Suggestion selected:", suggestion);
-                sendMessage(suggestion);
+                handleSendMessage(suggestion);
               }}
             />
             <Separator className="my-3" />
           </>
         )}
         <MessageInput
-          onSendMessage={(content) => {
-            console.log("Sending message from input:", content);
-            sendMessage(content);
-          }}
+          onSendMessage={handleSendMessage}
           isLoading={isLoading}
           placeholder="Ask me about your tasks or type a new task..."
         />
