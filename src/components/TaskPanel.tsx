@@ -1,47 +1,31 @@
 
-import React from "react";
+import React, { useContext } from "react";
 import TaskList from "./TaskList";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useTodoistAgent } from "../context/TodoistAgentContext";
-import { ArrowRight } from "lucide-react";
+import { TodoistAgentContext } from "../context/TodoistAgentContext";
 
 const TaskPanel: React.FC = () => {
-  const { tasks, isLoading, refreshTasks, completeTask, sendMessage } = useTodoistAgent();
+  const context = useContext(TodoistAgentContext);
+  
+  if (!context) {
+    throw new Error("TaskPanel must be used within TodoistAgentProvider");
+  }
+  
+  const { tasks, isLoading, refreshTasks, completeTask } = context;
 
   return (
-    <Card className="w-full">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">Your Tasks</CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs"
-            onClick={refreshTasks}
-            disabled={isLoading}
-          >
-            Refresh
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <TaskList 
-          tasks={tasks} 
-          onCompleteTask={completeTask} 
-          isLoading={isLoading} 
-        />
-        
-        <Button
-          variant="link"
-          size="sm"
-          className="mt-4 text-todoist-red"
-          onClick={() => sendMessage("Create a new task")}
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Your Tasks</h2>
+        <button
+          onClick={() => refreshTasks()}
+          className="text-xs text-gray-500 hover:text-todoist-red flex items-center"
+          disabled={isLoading}
         >
-          Create New Task <ArrowRight className="h-3 w-3 ml-1" />
-        </Button>
-      </CardContent>
-    </Card>
+          {isLoading ? "Loading..." : "Refresh"}
+        </button>
+      </div>
+      <TaskList tasks={tasks} onCompleteTask={completeTask} />
+    </div>
   );
 };
 

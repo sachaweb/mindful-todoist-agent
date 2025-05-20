@@ -1,13 +1,19 @@
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useContext } from "react";
 import Message from "./Message";
 import MessageInput from "./MessageInput";
 import Suggestions from "./Suggestions";
-import { useTodoistAgent } from "../context/TodoistAgentContext";
+import { TodoistAgentContext } from "../context/TodoistAgentContext";
 import { Separator } from "@/components/ui/separator";
 
 const ChatInterface: React.FC = () => {
-  const { messages, isLoading, sendMessage, suggestions } = useTodoistAgent();
+  const context = useContext(TodoistAgentContext);
+  
+  if (!context) {
+    throw new Error("ChatInterface must be used within TodoistAgentProvider");
+  }
+  
+  const { messages, isLoading, sendMessage, suggestions } = context;
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom when messages change
