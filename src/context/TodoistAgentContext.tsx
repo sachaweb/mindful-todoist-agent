@@ -1,176 +1,70 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { Message, TodoistTask } from "../types";
-import todoistApi from "../services/todoist-api";
+import React, { createContext, useContext, useEffect } from "react";
+import { Message } from "../types";
 import aiService from "../services/ai-service";
-import { useToast } from "@/components/ui/use-toast";
+import { TodoistAgentContextProps, TodoistAgentProviderProps } from "./types";
+import { handleTaskCreationIntent } from "./taskUtils";
+import { useTodoistOperations } from "../hooks/useTodoistOperations";
+import { useMessageHandler } from "../hooks/useMessageHandler";
 
-interface TodoistAgentContextProps {
-  messages: Message[];
-  isLoading: boolean;
-  apiKeySet: boolean;
-  suggestions: string[];
-  tasks: TodoistTask[];
-  setApiKey: (key: string) => Promise<boolean>;
-  sendMessage: (content: string) => Promise<void>;
-  refreshTasks: () => Promise<void>;
-  createTask: (content: string, due?: string, priority?: number, labels?: string[]) => Promise<boolean>;
-  completeTask: (taskId: string) => Promise<boolean>;
-}
-
-interface TodoistAgentProviderProps {
-  children: ReactNode;
-}
-
-// Make sure to export the context
+// Create the context
 export const TodoistAgentContext = createContext<TodoistAgentContextProps | undefined>(undefined);
 
 export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ children }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [tasks, setTasks] = useState<TodoistTask[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [apiKeySet, setApiKeySet] = useState<boolean>(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const { toast } = useToast();
+  const {
+    isLoading, 
+    tasks, 
+    apiKeySet, 
+    setApiKey: setTodoistApiKey, 
+    refreshTasks, 
+    createTask, 
+    completeTask
+  } = useTodoistOperations();
+  
+  const {
+    messages,
+    suggestions,
+    addMessage,
+    setMessages,
+    generateSuggestions,
+    initializeMessages
+  } = useMessageHandler();
 
-  // Check if API key is set on mount
+  // Initialize on mount
   useEffect(() => {
-    const hasApiKey = todoistApi.hasApiKey();
-    setApiKeySet(hasApiKey);
-    
     console.log("TodoistAgentProvider initialized");
+    initializeMessages();
     
-    // Load initial messages from AI service context
-    const context = aiService.getContext();
-    console.log("Initial context:", context);
+    // If API key is set, fetch tasks
+    if (apiKeySet) {
+      refreshTasks();
+    }
+  }, [apiKeySet, initializeMessages, refreshTasks]);
+
+  // Update suggestions when tasks change
+  useEffect(() => {
+    if (tasks.length > 0) {
+      generateSuggestions(tasks);
+    }
+  }, [tasks, generateSuggestions]);
+
+  // Function to set the API key with a confirmation message
+  const setApiKey = async (key: string): Promise<boolean> => {
+    const success = await setTodoistApiKey(key);
     
-    if (context.recentMessages && context.recentMessages.length > 0) {
-      console.log("Setting initial messages from context:", context.recentMessages);
-      setMessages(context.recentMessages);
-    } else {
-      // Add welcome message if no previous context
-      const welcomeMessage: Message = {
-        id: "welcome",
-        content: "Hi! I'm your Todoist assistant. I can help you manage tasks using natural language. To get started, please set your Todoist API key.",
+    if (success) {
+      // Add confirmation message
+      const newMessage: Message = {
+        id: Math.random().toString(36).substring(2, 11),
+        content: "API key set successfully! I can now help you manage your Todoist tasks.",
         role: "assistant",
         timestamp: new Date(),
       };
-      console.log("Adding welcome message:", welcomeMessage);
-      setMessages([welcomeMessage]);
+      
+      console.log("Adding API key success message:", newMessage);
+      addMessage(newMessage);
     }
     
-    // If API key is set, fetch tasks
-    if (hasApiKey) {
-      refreshTasks();
-    }
-  }, []);
-
-  // Function to set the API key
-  const setApiKey = async (key: string): Promise<boolean> => {
-    setIsLoading(true);
-    try {
-      todoistApi.setApiKey(key);
-      
-      // Verify the key works by fetching tasks
-      const response = await todoistApi.getTasks();
-      
-      if (response.success) {
-        setApiKeySet(true);
-        await refreshTasks();
-        
-        // Add confirmation message
-        const newMessage: Message = {
-          id: Math.random().toString(36).substring(2, 11),
-          content: "API key set successfully! I can now help you manage your Todoist tasks.",
-          role: "assistant",
-          timestamp: new Date(),
-        };
-        
-        console.log("Adding API key success message:", newMessage);
-        setMessages(prev => [...prev, newMessage]);
-        
-        toast({
-          title: "Success",
-          description: "Todoist API key connected successfully!",
-        });
-        
-        return true;
-      } else {
-        toast({
-          title: "Error",
-          description: "Invalid Todoist API key. Please check and try again.",
-          variant: "destructive",
-        });
-        return false;
-      }
-    } catch (error) {
-      console.error("Error setting API key:", error);
-      toast({
-        title: "Error",
-        description: "Failed to set Todoist API key. Please try again.",
-        variant: "destructive",
-      });
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Function to detect and handle task creation intent from AI response
-  const handleTaskCreationIntent = async (aiResponse: string, userMessage: string) => {
-    console.log("Checking for task creation intent in:", aiResponse);
-    
-    // Extract task content and due date from AI response using regex
-    // Example: "I'll create a task "Buy groceries" with due date tomorrow."
-    const taskCreationRegex = /I'll create (?:a )?task "([^"]+)"(?: with due date ([^.?!]+))?/i;
-    const taskCreationMatch = aiResponse.match(taskCreationRegex);
-    
-    if (taskCreationMatch) {
-      const content = taskCreationMatch[1];
-      const dueDate = taskCreationMatch[2] || "";
-      let priority = 1; // Default priority
-      
-      console.log(`Detected task creation intent: "${content}" due: "${dueDate}"`);
-      
-      // Check if high priority was mentioned
-      if (aiResponse.toLowerCase().includes("high priority")) {
-        priority = 4;
-      }
-      
-      // Extract labels if mentioned
-      const labels: string[] = [];
-      if (aiResponse.toLowerCase().includes("labels")) {
-        // This is a simplistic implementation - in a real app, you'd want more 
-        // sophisticated logic to extract actual labels
-        const labelRegex = /labels? ([\w\s,]+)/i;
-        const labelMatch = aiResponse.match(labelRegex);
-        if (labelMatch) {
-          const labelText = labelMatch[1];
-          labels.push(...labelText.split(",").map(l => l.trim()));
-        }
-      }
-      
-      // Create the task
-      if (content) {
-        try {
-          console.log(`Creating task: "${content}", due: "${dueDate}", priority: ${priority}, labels: [${labels.join(", ")}]`);
-          const success = await createTask(content, dueDate, priority, labels);
-          
-          if (success) {
-            // Add a confirmation message to the chat
-            const confirmationMessage: Message = {
-              id: Math.random().toString(36).substring(2, 11),
-              content: `✅ Task "${content}" has been created${dueDate ? ` with due date ${dueDate}` : ''}.`,
-              role: "assistant",
-              timestamp: new Date(),
-            };
-            
-            setMessages(prev => [...prev, confirmationMessage]);
-          }
-        } catch (error) {
-          console.error("Error creating task from AI intent:", error);
-        }
-      }
-    }
+    return success;
   };
 
   // Function to send a message to the AI
@@ -195,18 +89,7 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     };
     
     console.log("Adding user message to state:", userMessage);
-    setMessages(prev => {
-      console.log("Previous messages:", prev);
-      // Check if this message already exists to prevent duplicates
-      const messageExists = prev.some(m => m.content === content && m.role === "user");
-      if (messageExists) {
-        console.log("Message already exists, not adding duplicate");
-        return prev;
-      }
-      const updatedMessages = [...prev, userMessage];
-      console.log("Updated messages:", updatedMessages);
-      return updatedMessages;
-    });
+    addMessage(userMessage);
     
     try {
       // Process message with AI service
@@ -223,121 +106,15 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       };
       
       console.log("Adding AI response message:", aiMessage);
-      setMessages(prev => [...prev, aiMessage]);
+      addMessage(aiMessage);
       
       // Check if the AI intended to create a task
       if (apiKeySet) {
-        await handleTaskCreationIntent(response, content);
+        await handleTaskCreationIntent(response, content, createTask, addMessage);
         await refreshTasks();
       }
     } catch (error) {
       console.error("Error processing message:", error);
-      toast({
-        title: "Error",
-        description: "Failed to process your message. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Function to refresh tasks from Todoist
-  const refreshTasks = async (): Promise<void> => {
-    if (!todoistApi.hasApiKey()) return;
-    
-    setIsLoading(true);
-    try {
-      const response = await todoistApi.getTasks();
-      
-      if (response.success && response.data) {
-        setTasks(response.data);
-        
-        // Generate suggestions based on tasks
-        const newSuggestions = aiService.analyzeTasks(response.data);
-        setSuggestions(newSuggestions);
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to fetch tasks from Todoist.",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Error refreshing tasks:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch your tasks. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Function to create a new task
-  const createTask = async (content: string, due?: string, priority?: number, labels?: string[]): Promise<boolean> => {
-    setIsLoading(true);
-    try {
-      const response = await todoistApi.createTask(content, due, priority, labels);
-      
-      if (response.success) {
-        await refreshTasks();
-        toast({
-          title: "Success",
-          description: "Task created successfully!",
-        });
-        return true;
-      } else {
-        toast({
-          title: "Error",
-          description: response.error || "Failed to create task.",
-          variant: "destructive",
-        });
-        return false;
-      }
-    } catch (error) {
-      console.error("Error creating task:", error);
-      toast({
-        title: "Error",
-        description: "Failed to create task. Please try again.",
-        variant: "destructive",
-      });
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Function to complete a task
-  const completeTask = async (taskId: string): Promise<boolean> => {
-    setIsLoading(true);
-    try {
-      const response = await todoistApi.completeTask(taskId);
-      
-      if (response.success) {
-        await refreshTasks();
-        toast({
-          title: "Success",
-          description: "Task completed!",
-        });
-        return true;
-      } else {
-        toast({
-          title: "Error",
-          description: response.error || "Failed to complete task.",
-          variant: "destructive",
-        });
-        return false;
-      }
-    } catch (error) {
-      console.error("Error completing task:", error);
-      toast({
-        title: "Error",
-        description: "Failed to complete task. Please try again.",
-        variant: "destructive",
-      });
-      return false;
     } finally {
       setIsLoading(false);
     }
