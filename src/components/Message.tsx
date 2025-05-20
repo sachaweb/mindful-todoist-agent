@@ -10,6 +10,16 @@ interface MessageProps {
 const Message: React.FC<MessageProps> = ({ message }) => {
   const isUser = message.role === "user";
   
+  // Helper to format message content with line breaks
+  const formatMessage = (content: string) => {
+    return content.split('\n').map((line, i) => (
+      <React.Fragment key={i}>
+        {line}
+        {i < content.split('\n').length - 1 && <br />}
+      </React.Fragment>
+    ));
+  };
+  
   return (
     <div
       className={cn(
@@ -26,7 +36,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
           </div>
         )}
         <div>
-          <p className="text-sm text-gray-700">{message.content}</p>
+          <p className="text-sm text-gray-700">{formatMessage(message.content)}</p>
           <p className="text-xs text-gray-400 mt-1">
             {message.timestamp.toLocaleTimeString([], {
               hour: "2-digit",

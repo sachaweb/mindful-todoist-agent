@@ -24,6 +24,9 @@ export class AiService {
 
     // Update tasks in context
     this.context.openTasks = tasks;
+    
+    // Save the last query for context
+    this.context.lastQuery = message;
 
     // Save context
     this.saveContext();
@@ -108,50 +111,96 @@ export class AiService {
   }
 
   private async generateResponse(message: string): Promise<string> {
-    // Enhanced rule-based response system
-    const lowerMessage = message.toLowerCase();
+    // Enhanced rule-based response system with natural language processing
+    const lowerMessage = message.toLowerCase().trim();
     
-    // Handle questions about bundling or grouping tasks
-    if (lowerMessage.includes("bundle") || lowerMessage.includes("group") || lowerMessage.includes("batch")) {
-      return "To bundle similar tasks together, I can help you identify tasks with similar themes. Would you like me to group your tasks by category, priority, or due date?";
+    // Task Creation
+    if (
+      lowerMessage.includes("create") || 
+      lowerMessage.includes("add") || 
+      lowerMessage.includes("make") || 
+      lowerMessage.startsWith("add ") ||
+      (lowerMessage.startsWith("i need to") && !lowerMessage.includes("?"))
+    ) {
+      // Extract task details
+      let taskContent = message;
+      let dueDate = "";
+      
+      // Try to extract due date information
+      if (lowerMessage.includes("tomorrow")) {
+        dueDate = "tomorrow";
+      } else if (lowerMessage.includes("today")) {
+        dueDate = "today";
+      } else if (lowerMessage.includes("next week")) {
+        dueDate = "next week";
+      }
+      
+      if (dueDate) {
+        return `I'll create a task "${taskContent}" with due date ${dueDate}. Would you like to add any priority or labels?`;
+      } else {
+        return `I'll create a task "${taskContent}". Would you like to set a due date for this task?`;
+      }
     }
     
-    // Handle task retrieval requests
-    if (lowerMessage.includes("retrieve") || lowerMessage.includes("show") || lowerMessage.includes("display") || lowerMessage.includes("list tasks") || lowerMessage.includes("my tasks")) {
-      return "I've refreshed your task list. You can see your tasks in the panel on the right. Would you like me to help you organize them in any specific way?";
+    // Task Update
+    if (lowerMessage.includes("update") || lowerMessage.includes("change") || lowerMessage.includes("edit")) {
+      return "I'll help you update that task. Which part would you like to change? The due date, priority, or description?";
     }
     
-    // Handle task creation
-    if (lowerMessage.includes("add task") || lowerMessage.includes("create task") || lowerMessage.startsWith("add ")) {
-      return "I'll help you add that task. What details would you like to include? You can specify a due date, priority level, or project.";
-    }
-    
-    // Handle task completion
+    // Task Completion
     if (lowerMessage.includes("complete") || lowerMessage.includes("mark as done") || lowerMessage.includes("finish task")) {
-      return "I'll mark that task as complete for you. You can also complete tasks directly from the task panel on the right by clicking the checkmark button.";
+      return "Great! I'll mark that task as complete for you. Is there anything else you'd like to accomplish today?";
     }
     
-    // Handle prioritization requests
+    // Task Retrieval/Listing
+    if (
+      lowerMessage.includes("show") || 
+      lowerMessage.includes("list") || 
+      lowerMessage.includes("what are my") || 
+      lowerMessage.includes("my tasks") ||
+      lowerMessage.includes("display") ||
+      lowerMessage.includes("view") ||
+      lowerMessage.includes("see")
+    ) {
+      if (this.context.openTasks && this.context.openTasks.length > 0) {
+        return `You have ${this.context.openTasks.length} open tasks. You can see them in the panel on the right. Would you like me to help you organize them?`;
+      } else {
+        return "You don't have any open tasks at the moment. Would you like to create one?";
+      }
+    }
+    
+    // Task Grouping/Batching
+    if (
+      lowerMessage.includes("group") || 
+      lowerMessage.includes("batch") || 
+      lowerMessage.includes("organize") || 
+      lowerMessage.includes("categorize") ||
+      lowerMessage.includes("bundle")
+    ) {
+      return "I can help you group similar tasks together. Would you like to group them by category, due date, or priority?";
+    }
+    
+    // Task Prioritization
     if (lowerMessage.includes("prioritize") || lowerMessage.includes("important") || lowerMessage.includes("urgent")) {
-      return "I can help you prioritize your tasks. Would you like to sort them by due date, importance, or difficulty?";
+      return "I'll help you prioritize your tasks. Would you like to focus on due date, importance, or effort required?";
     }
     
-    // Handle scheduling queries
-    if (lowerMessage.includes("schedule") || lowerMessage.includes("when") || lowerMessage.includes("time")) {
-      return "I can help you schedule your tasks. Would you like me to suggest time blocks for your tasks based on their priority and estimated duration?";
-    }
-    
-    // Handle help requests
+    // Help requests
     if (lowerMessage.includes("help") || lowerMessage.includes("what can you do")) {
-      return "I can help you manage your Todoist tasks in several ways:\n- Create tasks with natural language\n- Complete tasks\n- Organize and prioritize your task list\n- Bundle similar tasks together\n- Suggest time management strategies\n\nJust let me know what you'd like assistance with!";
+      return "I can help you manage your Todoist tasks in several ways:\n- Create new tasks\n- Update existing tasks\n- Complete tasks\n- List and organize your tasks\n- Group similar tasks together\n- Provide productivity suggestions\n\nJust tell me what you'd like to do!";
     }
     
+    // Analyze previous context to improve response
+    if (this.context.lastQuery && this.context.lastQuery.toLowerCase().includes("create")) {
+      return "I'll add that task for you. Is there anything else you'd like me to do with your tasks today?";
+    }
+
     // Default varying responses
     const defaultResponses = [
-      "I'm here to help with your tasks. Would you like to create a new task, view your current ones, or get some organizational suggestions?",
-      "How can I assist with your task management today? I can help create, organize, or complete tasks.",
-      "I'm your Todoist assistant. Let me know if you'd like to add a task, review your current tasks, or get productivity suggestions.",
-      "Is there a specific aspect of your task management I can help with today?"
+      "I'm here to help manage your Todoist tasks. What would you like me to help you with today?",
+      "How can I assist with your task management? Would you like to create, update, or organize your tasks?",
+      "I can help with creating, updating, or organizing your Todoist tasks. What would you like to do?",
+      "Ready to help with your tasks! Would you like to add a new task, check your current ones, or get some organization tips?"
     ];
     
     return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
@@ -161,6 +210,7 @@ export class AiService {
     localStorage.setItem("ai_context", JSON.stringify({
       recentMessages: this.context.recentMessages,
       lastSuggestion: this.context.lastSuggestion,
+      lastQuery: this.context.lastQuery,
       // Note: We don't store tasks as they can get stale quickly
     }));
   }
