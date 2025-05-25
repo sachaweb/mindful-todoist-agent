@@ -8,7 +8,7 @@ export const handleTaskCreationIntent = async (
   userMessage: string,
   createTask: (content: string, due?: string, priority?: number, labels?: string[]) => Promise<boolean>,
   addMessageToChat: (message: Message) => void,
-  existingTasks: TodoistTask[] = [] // Use existing tasks instead of fetching
+  existingTasks: TodoistTask[] = []
 ): Promise<void> => {
   console.log("Checking for task creation intent in:", aiResponse);
   
@@ -72,23 +72,28 @@ export const handleTaskCreationIntent = async (
     console.log(`Detected task update intent: Update "${taskName}" due date to "${newDueDate}"`);
     
     try {
-      // Use existing tasks instead of fetching from API
-      if (existingTasks.length === 0) {
-        console.log("No existing tasks available for update");
+      // Use targeted search instead of relying on existing tasks
+      console.log(`Searching for tasks containing: "${taskName}"`);
+      const searchResponse = await todoistApi.searchTasks(taskName);
+      
+      if (!searchResponse.success) {
+        console.error("Failed to search for tasks:", searchResponse.error);
         
-        const notFoundMessage: Message = {
+        const errorMessage: Message = {
           id: Math.random().toString(36).substring(2, 11),
-          content: `❌ No tasks available to update. Please refresh your tasks first.`,
+          content: `❌ Failed to search for task "${taskName}". ${searchResponse.error || 'Please try again.'}`,
           role: "assistant",
           timestamp: new Date(),
         };
         
-        addMessageToChat(notFoundMessage);
+        addMessageToChat(errorMessage);
         return;
       }
 
-      // Find the task to update from existing tasks
-      const taskToUpdate = existingTasks.find(task => 
+      const foundTasks = searchResponse.data || [];
+      
+      // Find the most relevant task (exact match or best partial match)
+      const taskToUpdate = foundTasks.find(task => 
         task.content.toLowerCase().includes(taskName.toLowerCase())
       );
       
@@ -124,7 +129,7 @@ export const handleTaskCreationIntent = async (
           addMessageToChat(errorMessage);
         }
       } else {
-        console.log(`Task "${taskName}" not found in current tasks`);
+        console.log(`Task "${taskName}" not found in search results`);
         
         // Add a message indicating task not found
         const notFoundMessage: Message = {
@@ -142,7 +147,7 @@ export const handleTaskCreationIntent = async (
       // Add an error message to the chat
       const errorMessage: Message = {
         id: Math.random().toString(36).substring(2, 11),
-        content: `❌ Error updating task "${taskName}". Please try again.`,
+        content: `❌ Error searching for task "${taskName}". Please try again.`,
         role: "assistant",
         timestamp: new Date(),
       };
@@ -152,16 +157,16 @@ export const handleTaskCreationIntent = async (
   }
 };
 
-// Function to refresh tasks from Todoist
-export const fetchTasks = async (): Promise<TodoistTask[]> => {
+// Function to refresh tasks from Todoist with optional filtering
+export const fetchTasks = async (filter?: string): Promise<TodoistTask[]> => {
   if (!todoistApi.hasApiKey()) {
     console.log("No Todoist API key available");
     return [];
   }
   
   try {
-    console.log("Fetching tasks from Todoist API...");
-    const response = await todoistApi.getTasks();
+    console.log("Fetching tasks from Todoist API with filter:", filter);
+    const response = await todoistApi.getTasks(filter);
     
     if (response.success && response.data) {
       console.log("Successfully fetched tasks:", response.data);

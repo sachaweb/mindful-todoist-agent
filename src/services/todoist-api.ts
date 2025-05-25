@@ -1,11 +1,10 @@
-
 import { TodoistTask, TodoistApiResponse } from "../types";
 import { supabase } from "@/integrations/supabase/client";
 
 export class TodoistApi {
   private apiKeySet: boolean = true; // Always true since we use Edge Function
   private lastRequestTime: number = 0;
-  private minRequestInterval: number = 5000; // Increased to 5 seconds between requests
+  private minRequestInterval: number = 5000; // 5 seconds between requests
   private requestQueue: Array<() => Promise<any>> = [];
   private isProcessingQueue: boolean = false;
 
@@ -67,13 +66,16 @@ export class TodoistApi {
   }
 
   // Task operations using Edge Function with queue
-  public async getTasks(): Promise<TodoistApiResponse> {
+  public async getTasks(filter?: string): Promise<TodoistApiResponse> {
     return this.queueRequest(async () => {
       try {
-        console.log("Calling Edge Function to get tasks...");
+        console.log("Calling Edge Function to get tasks with filter:", filter);
         
         const { data, error } = await supabase.functions.invoke('todoist-proxy', {
-          body: { action: 'getTasks' }
+          body: { 
+            action: 'getTasks',
+            data: { filter } // Pass filter to Edge Function
+          }
         });
 
         if (error) {
@@ -87,7 +89,6 @@ export class TodoistApi {
         } else {
           console.error("Todoist API error:", data.error);
           
-          // Handle rate limiting specifically
           if (data.error && data.error.includes('429')) {
             return { success: false, error: "Rate limited by Todoist. Please wait a moment before trying again." };
           }
@@ -132,7 +133,6 @@ export class TodoistApi {
         } else {
           console.error("Todoist API error:", data.error);
           
-          // Handle rate limiting specifically
           if (data.error && data.error.includes('429')) {
             return { success: false, error: "Rate limited by Todoist. Please wait a moment before trying again." };
           }
@@ -172,7 +172,6 @@ export class TodoistApi {
         } else {
           console.error("Todoist API error:", data.error);
           
-          // Handle rate limiting specifically
           if (data.error && data.error.includes('429')) {
             return { success: false, error: "Rate limited by Todoist. Please wait a moment before trying again." };
           }
@@ -212,7 +211,6 @@ export class TodoistApi {
         } else {
           console.error("Todoist API error:", data.error);
           
-          // Handle rate limiting specifically
           if (data.error && data.error.includes('429')) {
             return { success: false, error: "Rate limited by Todoist. Please wait a moment before trying again." };
           }
@@ -227,6 +225,11 @@ export class TodoistApi {
         };
       }
     });
+  }
+
+  // Method to search for tasks by content
+  public async searchTasks(query: string): Promise<TodoistApiResponse> {
+    return this.getTasks(query);
   }
 }
 

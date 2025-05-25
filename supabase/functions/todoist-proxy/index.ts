@@ -24,7 +24,16 @@ serve(async (req) => {
     
     switch (action) {
       case 'getTasks':
-        response = await fetch(`${TODOIST_API_URL}/tasks`, {
+        let url = `${TODOIST_API_URL}/tasks`;
+        
+        // Add filter parameter if provided
+        if (data?.filter) {
+          const encodedFilter = encodeURIComponent(data.filter);
+          url += `?filter=${encodedFilter}`;
+          console.log('Using filtered query:', url);
+        }
+        
+        response = await fetch(url, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${TODOIST_API_KEY}`,

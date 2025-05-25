@@ -66,17 +66,6 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     return success;
   };
 
-  // Optimistic task update function
-  const updateTaskOptimistically = (taskId: string, updates: any) => {
-    setTasks(prevTasks => 
-      prevTasks.map(task => 
-        task.id === taskId 
-          ? { ...task, ...updates }
-          : task
-      )
-    );
-  };
-
   // Function to send a message to the AI
   const sendMessage = async (content: string): Promise<void> => {
     console.log("sendMessage called with:", content);
@@ -134,17 +123,15 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       
       // Check if the AI intended to create a task or update a task
       if (apiKeySet) {
-        // Pass existing tasks to avoid unnecessary API calls
+        // Use more efficient task handling - no need to pass existing tasks
+        // The handleTaskCreationIntent function will now use targeted searches
         await handleTaskCreationIntent(
           response, 
           content, 
           createTask, 
-          addMessage,
-          tasks // Pass current tasks instead of fetching
+          addMessage
+          // Removed tasks parameter - function will use targeted searches instead
         );
-        
-        // Only refresh tasks if a task was actually created/updated
-        // We'll handle this more intelligently in the task operations
       }
     } catch (error) {
       console.error("Error processing message:", error);
