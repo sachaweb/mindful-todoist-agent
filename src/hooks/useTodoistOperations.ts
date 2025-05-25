@@ -7,16 +7,14 @@ import { fetchTasks } from '../context/taskUtils';
 export const useTodoistOperations = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [tasks, setTasks] = useState<TodoistTask[]>([]);
-  const [apiKeySet, setApiKeySet] = useState<boolean>(todoistApi.hasApiKey());
+  const [apiKeySet, setApiKeySet] = useState<boolean>(true); // Always true since Edge Function handles it
   const { toast } = useToast();
 
-  // Function to set the API key
+  // Function to set the API key - simplified since Edge Function handles it
   const setApiKey = async (key: string): Promise<boolean> => {
     setIsLoading(true);
     try {
-      todoistApi.setApiKey(key);
-      
-      // Verify the key works by fetching tasks
+      // Verify the Edge Function works by fetching tasks
       const response = await todoistApi.getTasks();
       
       if (response.success) {
@@ -25,27 +23,25 @@ export const useTodoistOperations = () => {
         
         toast({
           title: "Success",
-          description: "Todoist API key connected successfully!",
+          description: "Connected to Todoist successfully!",
         });
         
         return true;
       } else {
-        todoistApi.setApiKey(''); // Clear the invalid API key
         setApiKeySet(false);
         toast({
           title: "Error",
-          description: "Invalid Todoist API key. Please check and try again.",
+          description: "Failed to connect to Todoist. Please check your setup.",
           variant: "destructive",
         });
         return false;
       }
     } catch (error) {
-      console.error("Error setting API key:", error);
-      todoistApi.setApiKey(''); // Clear the API key on error
+      console.error("Error testing Todoist connection:", error);
       setApiKeySet(false);
       toast({
         title: "Error",
-        description: "Failed to connect to Todoist. Please check your API key and internet connection.",
+        description: "Failed to connect to Todoist. Please check your setup.",
         variant: "destructive",
       });
       return false;

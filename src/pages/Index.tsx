@@ -1,15 +1,13 @@
-
 import React, { useState, useEffect } from "react";
 import { TodoistAgentProvider, useTodoistAgent } from "../context/TodoistAgentContext";
 import ChatInterface from "../components/ChatInterface";
-import ApiKeyForm from "../components/ApiKeyForm";
 import ClaudeApiKeyForm from "../components/ClaudeApiKeyForm";
 import TaskPanel from "../components/TaskPanel";
 import aiService from "../services/ai-service";
 
 // Separate component to use the context
 const MainContent: React.FC = () => {
-  const { apiKeySet, isLoading, setApiKey } = useTodoistAgent();
+  const { isLoading } = useTodoistAgent();
   const [claudeApiKeySet, setClaudeApiKeySet] = useState(false);
   
   useEffect(() => {
@@ -30,16 +28,7 @@ const MainContent: React.FC = () => {
     );
   }
 
-  // Then show Todoist API key form if not set
-  if (!apiKeySet) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-4">
-        <ApiKeyForm onSubmit={setApiKey} isLoading={isLoading} />
-      </div>
-    );
-  }
-
-  // Show main interface when both API keys are set
+  // Show main interface when Claude API key is set (Todoist is handled by Edge Function)
   return (
     <>
       <div className="flex-1 md:w-3/4 h-full md:border-r overflow-hidden">
