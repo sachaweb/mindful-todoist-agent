@@ -1,4 +1,5 @@
 import { Message, TodoistTask, ConversationContext } from "../types";
+import { supabase } from "@/integrations/supabase/client";
 
 export class AiService {
   private readonly MAX_CONTEXT_MESSAGES = 10;
@@ -7,36 +8,23 @@ export class AiService {
     openTasks: [],
     taskCreationState: null,
   };
-  private apiKey: string | null = null;
 
   constructor() {
     this.loadContext();
-    this.loadApiKey();
-  }
-
-  public setApiKey(apiKey: string): void {
-    this.apiKey = apiKey;
-    this.saveApiKey(apiKey);
   }
 
   public hasApiKey(): boolean {
-    return !!this.apiKey;
+    // Since we're using Edge Function, we don't need to check client-side
+    return true;
   }
 
-  private saveApiKey(apiKey: string): void {
-    localStorage.setItem("claude_api_key", apiKey);
-  }
-
-  private loadApiKey(): void {
-    this.apiKey = localStorage.getItem("claude_api_key");
+  public setApiKey(apiKey: string): void {
+    // API key is now managed in Supabase secrets, so this is a no-op
+    console.log("API key management is now handled by Edge Function");
   }
 
   public async processMessage(message: string, tasks: TodoistTask[] = []): Promise<string> {
     console.log("AI service processing message:", message);
-    
-    if (!this.apiKey) {
-      return "Please set your Claude API key first to use the AI assistant.";
-    }
     
     // Add user message to context
     this.addMessageToContext({
@@ -52,7 +40,7 @@ export class AiService {
     this.saveContext();
 
     try {
-      // Generate response using Claude
+      // Generate response using Claude proxy
       const response = await this.generateClaudeResponse(message, tasks);
       console.log("Claude response:", response);
 
@@ -68,7 +56,7 @@ export class AiService {
       return response;
     } catch (error) {
       console.error("Error in processMessage:", error);
-      return "I'm having trouble connecting to the AI service right now. Please check your Claude API key and try again.";
+      return "I'm having trouble connecting to the AI service right now. Please try again.";
     }
   }
 
@@ -76,29 +64,27 @@ export class AiService {
     const systemPrompt = this.buildSystemPrompt(tasks);
     const conversationHistory = this.buildConversationHistory();
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": this.apiKey!,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-3-haiku-20240307",
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: [...conversationHistory, { role: "user", content: message }],
-      }),
+    console.log("Calling Claude proxy Edge Function");
+    const { data, error } = await supabase.functions.invoke('claude-proxy', {
+      body: {
+        message,
+        tasks,
+        systemPrompt,
+        conversationHistory
+      }
     });
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "Unknown error");
-      console.error("Claude API error:", response.status, response.statusText, errorText);
-      throw new Error(`Claude API error: ${response.status} ${response.statusText}`);
+    if (error) {
+      console.error("Edge Function error:", error);
+      throw new Error(`Edge Function error: ${error.message}`);
     }
 
-    const data = await response.json();
-    return data.content[0].text;
+    if (!data.success) {
+      console.error("Claude proxy error:", data.error);
+      throw new Error(`Claude API error: ${data.error}`);
+    }
+
+    return data.response;
   }
 
   private buildSystemPrompt(tasks: TodoistTask[]): string {
