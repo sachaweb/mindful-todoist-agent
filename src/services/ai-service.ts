@@ -1,21 +1,43 @@
 
 import { Message, TodoistTask, ConversationContext } from "../types";
 
-// This simulates an AI service - in a real implementation, this would connect to an LLM API
 export class AiService {
-  private readonly MAX_CONTEXT_MESSAGES = 10; // Increased from 5 to provide more context
+  private readonly MAX_CONTEXT_MESSAGES = 10;
   private context: ConversationContext = {
     recentMessages: [],
     openTasks: [],
-    taskCreationState: null, // Track the state of task creation
+    taskCreationState: null,
   };
+  private apiKey: string | null = null;
 
   constructor() {
     this.loadContext();
+    this.loadApiKey();
+  }
+
+  public setApiKey(apiKey: string): void {
+    this.apiKey = apiKey;
+    this.saveApiKey(apiKey);
+  }
+
+  public hasApiKey(): boolean {
+    return !!this.apiKey;
+  }
+
+  private saveApiKey(apiKey: string): void {
+    localStorage.setItem("claude_api_key", apiKey);
+  }
+
+  private loadApiKey(): void {
+    this.apiKey = localStorage.getItem("claude_api_key");
   }
 
   public async processMessage(message: string, tasks: TodoistTask[] = []): Promise<string> {
     console.log("AI service processing message:", message);
+    
+    if (!this.apiKey) {
+      return "Please set your Claude API key first to use the AI assistant.";
+    }
     
     // Add user message to context
     this.addMessageToContext({
@@ -27,16 +49,12 @@ export class AiService {
 
     // Update tasks in context
     this.context.openTasks = tasks;
-    
-    // Save the last query for context
     this.context.lastQuery = message;
-
-    // Save context
     this.saveContext();
 
-    // Process the message and generate a response
-    const response = await this.generateResponse(message);
-    console.log("AI service generated response:", response);
+    // Generate response using Claude
+    const response = await this.generateClaudeResponse(message, tasks);
+    console.log("Claude response:", response);
 
     // Add AI response to context
     this.addMessageToContext({
@@ -46,10 +64,69 @@ export class AiService {
       timestamp: new Date(),
     });
 
-    // Save updated context
     this.saveContext();
-
     return response;
+  }
+
+  private async generateClaudeResponse(message: string, tasks: TodoistTask[]): Promise<string> {
+    try {
+      const systemPrompt = this.buildSystemPrompt(tasks);
+      const conversationHistory = this.buildConversationHistory();
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": this.apiKey!,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-3-haiku-20240307",
+          max_tokens: 1000,
+          system: systemPrompt,
+          messages: [...conversationHistory, { role: "user", content: message }],
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Claude API error:", response.status, response.statusText);
+        return "Sorry, I encountered an error while processing your request. Please check your API key and try again.";
+      }
+
+      const data = await response.json();
+      return data.content[0].text;
+    } catch (error) {
+      console.error("Error calling Claude API:", error);
+      return "Sorry, I encountered an error while processing your request. Please try again.";
+    }
+  }
+
+  private buildSystemPrompt(tasks: TodoistTask[]): string {
+    const taskList = tasks.length > 0 
+      ? tasks.map(t => `- ${t.content}${t.due ? ` (due: ${t.due.string || t.due.date})` : ''} [Priority: ${t.priority}]`).join('\n')
+      : "No open tasks";
+
+    return `You are a helpful Todoist task management assistant. You can help users create, update, complete, and organize their tasks using natural language.
+
+Current open tasks:
+${taskList}
+
+When a user wants to create a task, respond with: "I'll create a task "[task content]" with due date [due date]." (if due date mentioned) or "I'll create a task "[task content]"." (if no due date).
+
+When a user wants to update a task due date, respond with: "I'll update the due date for your task "[task name]" to [new date]."
+
+When a user wants to complete a task, acknowledge it naturally.
+
+Be conversational, helpful, and focus on task management. Keep responses concise but friendly.`;
+  }
+
+  private buildConversationHistory(): Array<{ role: string; content: string }> {
+    return this.context.recentMessages
+      .slice(-5) // Keep last 5 messages for context
+      .map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
   }
 
   public analyzeTasks(tasks: TodoistTask[]): string[] {
@@ -59,32 +136,20 @@ export class AiService {
       return ["You don't have any open tasks. Would you like to create one?"];
     }
 
-    // Group similar tasks based on simple patterns
-    const callTasks = tasks.filter(t => 
-      t.content.toLowerCase().includes("call") || 
-      t.content.toLowerCase().includes("phone") || 
-      t.content.toLowerCase().includes("meeting")
-    );
-
-    const emailTasks = tasks.filter(t => 
-      t.content.toLowerCase().includes("email") || 
-      t.content.toLowerCase().includes("send") || 
-      t.content.toLowerCase().includes("write to")
-    );
-
     const urgentTasks = tasks.filter(t => t.priority === 4);
-
-    // Generate suggestions based on task groups
-    if (callTasks.length >= 2) {
-      suggestions.push(`You have ${callTasks.length} call/meeting tasks - would you like to batch them together?`);
-    }
-
-    if (emailTasks.length >= 2) {
-      suggestions.push(`I noticed ${emailTasks.length} email-related tasks - consider setting aside a specific time for emails.`);
-    }
+    const dueTodayTasks = tasks.filter(t => {
+      if (!t.due) return false;
+      const today = new Date().toDateString();
+      const taskDate = new Date(t.due.date).toDateString();
+      return today === taskDate;
+    });
 
     if (urgentTasks.length > 0) {
       suggestions.push(`You have ${urgentTasks.length} high-priority tasks to focus on.`);
+    }
+
+    if (dueTodayTasks.length > 0) {
+      suggestions.push(`You have ${dueTodayTasks.length} tasks due today.`);
     }
 
     if (tasks.length > 10) {
@@ -92,7 +157,6 @@ export class AiService {
     }
 
     if (suggestions.length === 0) {
-      // Default suggestion
       suggestions.push("What would you like to do with your tasks today?");
     }
 
@@ -107,230 +171,11 @@ export class AiService {
     console.log("Adding message to context:", message);
     this.context.recentMessages.push(message);
     
-    // Keep only the most recent messages
     if (this.context.recentMessages.length > this.MAX_CONTEXT_MESSAGES) {
       this.context.recentMessages = this.context.recentMessages.slice(
         this.context.recentMessages.length - this.MAX_CONTEXT_MESSAGES
       );
     }
-  }
-
-  private async generateResponse(message: string): Promise<string> {
-    // Enhanced rule-based response system with natural language processing
-    const lowerMessage = message.toLowerCase().trim();
-    
-    // Improved context awareness - look at previous messages
-    const recentUserMessages = this.context.recentMessages
-      .filter(msg => msg.role === "user")
-      .slice(-3);
-    
-    const recentAIMessages = this.context.recentMessages
-      .filter(msg => msg.role === "assistant")
-      .slice(-3);
-    
-    console.log("Recent context - User messages:", recentUserMessages);
-    console.log("Recent context - AI messages:", recentAIMessages);
-    console.log("Current task creation state:", this.context.taskCreationState);
-    
-    // Check if we're in the middle of creating a task
-    if (this.context.taskCreationState) {
-      console.log("Processing message in task creation flow", this.context.taskCreationState);
-      const { taskContent, dueDate, waitingFor } = this.context.taskCreationState;
-      
-      // Handle response to priority/labels question
-      if (waitingFor === 'priorityOrLabels') {
-        // If user says no, complete the task creation
-        if (['no', 'nope', 'not needed', 'don\'t need', 'not necessary'].includes(lowerMessage)) {
-          // Reset task creation state
-          this.context.taskCreationState = null;
-          return `Great! I'll create your task "${taskContent}"${dueDate ? ` with due date ${dueDate}` : ''} without additional priority or labels. The task has been added to your Todoist.`;
-        }
-        
-        // If user says yes or provides priority info
-        if (lowerMessage.includes('yes') || lowerMessage.includes('high') || lowerMessage.includes('important')) {
-          this.context.taskCreationState.waitingFor = 'labelConfirmation';
-          return `I'll set this task to high priority. Would you like me to add any labels to it as well?`;
-        }
-        
-        // If user provides label info directly
-        if (lowerMessage.includes('label') || lowerMessage.includes('tag')) {
-          // Reset task creation state - task is complete
-          this.context.taskCreationState = null;
-          return `I've created your task "${taskContent}"${dueDate ? ` with due date ${dueDate}` : ''} and added the labels you requested. The task has been added to your Todoist.`;
-        }
-      }
-      
-      // Handle response to label question
-      if (waitingFor === 'labelConfirmation') {
-        // Reset task creation state - we're done with the task
-        this.context.taskCreationState = null;
-        
-        if (['no', 'nope', 'not needed', 'don\'t need', 'not necessary'].includes(lowerMessage)) {
-          return `Got it! I've created your task "${taskContent}"${dueDate ? ` with due date ${dueDate}` : ''} with high priority but no labels. The task has been added to your Todoist.`;
-        }
-        
-        return `Perfect! I've created your task "${taskContent}"${dueDate ? ` with due date ${dueDate}` : ''} with high priority and the labels you requested. The task has been added to your Todoist.`;
-      }
-      
-      // Handle response to due date question
-      if (waitingFor === 'dueDate') {
-        let extractedDueDate = '';
-        
-        if (lowerMessage.includes('tomorrow')) {
-          extractedDueDate = 'tomorrow';
-        } else if (lowerMessage.includes('today')) {
-          extractedDueDate = 'today';
-        } else if (lowerMessage.includes('next week')) {
-          extractedDueDate = 'next week';
-        } else if (['no', 'nope', 'not needed', 'don\'t need', 'not necessary'].includes(lowerMessage)) {
-          // User doesn't want to set a due date
-          this.context.taskCreationState = {
-            taskContent,
-            dueDate: '',
-            waitingFor: 'priorityOrLabels'
-          };
-          return `No problem. Would you like to set a priority or add labels to this task?`;
-        } else {
-          extractedDueDate = 'the date you specified';
-        }
-        
-        // Update task state and ask about priority
-        this.context.taskCreationState = {
-          taskContent,
-          dueDate: extractedDueDate,
-          waitingFor: 'priorityOrLabels'
-        };
-        
-        return `I'll create a task "${taskContent}" with due date ${extractedDueDate}. Would you like to add any priority or labels?`;
-      }
-    }
-    
-    // Task Creation - start of flow
-    if (
-      lowerMessage.includes("create") || 
-      lowerMessage.includes("add") || 
-      lowerMessage.includes("make") || 
-      lowerMessage.startsWith("add ") ||
-      (lowerMessage.startsWith("i need to") && !lowerMessage.includes("?"))
-    ) {
-      // Extract task details
-      let taskContent = message;
-      let dueDate = "";
-      
-      // Try to extract due date information
-      if (lowerMessage.includes("tomorrow")) {
-        dueDate = "tomorrow";
-      } else if (lowerMessage.includes("today")) {
-        dueDate = "today";
-      } else if (lowerMessage.includes("next week")) {
-        dueDate = "next week";
-      }
-      
-      // Start the task creation flow by tracking state
-      if (dueDate) {
-        this.context.taskCreationState = {
-          taskContent,
-          dueDate,
-          waitingFor: 'priorityOrLabels'
-        };
-        return `I'll create a task "${taskContent}" with due date ${dueDate}. Would you like to add any priority or labels?`;
-      } else {
-        this.context.taskCreationState = {
-          taskContent,
-          dueDate: '',
-          waitingFor: 'dueDate'
-        };
-        return `I'll create a task "${taskContent}". Would you like to set a due date for this task?`;
-      }
-    }
-    
-    // IMPROVED TASK UPDATE DETECTION
-    // Better detection for changing due dates
-    const updateDueDateRegex = /(?:update|change|set|modify|make|reschedule|move)\s+(?:the\s+)?(?:due\s+date|deadline)\s+(?:of|for)?\s+(?:(?:the\s+)?(?:task|to-do|todo))?\s*(?:["']([^"']+)["']|([^"'\s]+(?:\s+[^"'\s]+)*))\s+(?:to\s+)?(?:be\s+)?(?:due\s+)?(?:on|for|to)\s+(\w+(?:\s+\w+)*)/i;
-    const updateTaskDueRegex = /(?:update|change|set|modify|make|reschedule|move)\s+(?:the\s+)?(?:task|to-do|todo)\s+(?:["']([^"']+)["']|([^"'\s]+(?:\s+[^"'\s]+)*))\s+(?:to\s+be\s+)?(?:due\s+)?(?:on|for|to)\s+(\w+(?:\s+\w+)*)/i;
-    
-    // Check both regex patterns
-    const dueDateMatch = updateDueDateRegex.exec(message) || updateTaskDueRegex.exec(message);
-    
-    if (dueDateMatch) {
-      const taskName = dueDateMatch[1] || dueDateMatch[2] || "";
-      const newDueDate = dueDateMatch[3] || "";
-      
-      if (taskName && newDueDate) {
-        console.log(`Detected due date change: Task "${taskName}" to "${newDueDate}"`);
-        return `I'll update the due date for your task "${taskName}" to ${newDueDate}. Would you like me to make any other changes to this task?`;
-      }
-    }
-    
-    // Task Update - general case
-    if (lowerMessage.includes("update") || lowerMessage.includes("change") || lowerMessage.includes("edit")) {
-      // Check if it mentions "due date" specifically
-      if (lowerMessage.includes("due date") || lowerMessage.includes("deadline") || lowerMessage.includes("due on")) {
-        // Extract possible task name and date
-        const taskMatch = /(?:task|todo|to-do)\s+(?:["']([^"']+)["']|([^"'\s]+(?:\s+[^"'\s]+)*))/i.exec(message);
-        const dateMatch = /(?:to|on|for)\s+(\w+(?:\s+\w+)*?)(?:\.|\?|$)/i.exec(message);
-        
-        const taskName = (taskMatch && (taskMatch[1] || taskMatch[2])) || "the task you mentioned";
-        const dueDate = (dateMatch && dateMatch[1]) || "the new date";
-        
-        return `I'll change the due date for your task "${taskName}" to ${dueDate}. Is there anything else you'd like me to update?`;
-      }
-      
-      return "I'll help you update that task. Which part would you like to change? The due date, priority, or description?";
-    }
-    
-    // Task Completion
-    if (lowerMessage.includes("complete") || lowerMessage.includes("mark as done") || lowerMessage.includes("finish task")) {
-      return "Great! I'll mark that task as complete for you. Is there anything else you'd like to accomplish today?";
-    }
-    
-    // Task Retrieval/Listing
-    if (
-      lowerMessage.includes("show") || 
-      lowerMessage.includes("list") || 
-      lowerMessage.includes("what are my") || 
-      lowerMessage.includes("my tasks") ||
-      lowerMessage.includes("display") ||
-      lowerMessage.includes("view") ||
-      lowerMessage.includes("see")
-    ) {
-      if (this.context.openTasks && this.context.openTasks.length > 0) {
-        return `You have ${this.context.openTasks.length} open tasks. You can see them in the panel on the right. Would you like me to help you organize them?`;
-      } else {
-        return "You don't have any open tasks at the moment. Would you like to create one?";
-      }
-    }
-    
-    // Task Grouping/Batching
-    if (
-      lowerMessage.includes("group") || 
-      lowerMessage.includes("batch") || 
-      lowerMessage.includes("organize") || 
-      lowerMessage.includes("categorize") ||
-      lowerMessage.includes("bundle")
-    ) {
-      return "I can help you group similar tasks together. Would you like to group them by category, due date, or priority?";
-    }
-    
-    // Task Prioritization
-    if (lowerMessage.includes("prioritize") || lowerMessage.includes("important") || lowerMessage.includes("urgent")) {
-      return "I'll help you prioritize your tasks. Would you like to focus on due date, importance, or effort required?";
-    }
-    
-    // Help requests
-    if (lowerMessage.includes("help") || lowerMessage.includes("what can you do")) {
-      return "I can help you manage your Todoist tasks in several ways:\n- Create new tasks\n- Update existing tasks\n- Complete tasks\n- List and organize your tasks\n- Group similar tasks together\n- Provide productivity suggestions\n\nJust tell me what you'd like to do!";
-    }
-    
-    // Default varying responses
-    const defaultResponses = [
-      "I'm here to help manage your Todoist tasks. What would you like me to help you with today?",
-      "How can I assist with your task management? Would you like to create, update, or organize your tasks?",
-      "I can help with creating, updating, or organizing your Todoist tasks. What would you like to do?",
-      "Ready to help with your tasks! Would you like to add a new task, check your current ones, or get some organization tips?"
-    ];
-    
-    return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
   }
 
   private saveContext(): void {
@@ -353,7 +198,6 @@ export class AiService {
       if (storedContext) {
         const parsedContext = JSON.parse(storedContext);
         
-        // Restore timestamps as Date objects
         if (parsedContext.recentMessages) {
           parsedContext.recentMessages.forEach((msg: any) => {
             msg.timestamp = new Date(msg.timestamp);
@@ -363,11 +207,9 @@ export class AiService {
         this.context = {
           ...this.context,
           ...parsedContext,
-          openTasks: [], // Always fetch fresh tasks
+          openTasks: [],
         };
         console.log("Context loaded successfully:", this.context);
-      } else {
-        console.log("No stored context found");
       }
     } catch (error) {
       console.error("Error loading context:", error);
@@ -379,6 +221,5 @@ export class AiService {
   }
 }
 
-// Create a singleton instance
 const aiService = new AiService();
 export default aiService;

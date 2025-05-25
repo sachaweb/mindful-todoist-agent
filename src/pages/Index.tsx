@@ -1,30 +1,53 @@
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { TodoistAgentProvider, useTodoistAgent } from "../context/TodoistAgentContext";
 import ChatInterface from "../components/ChatInterface";
 import ApiKeyForm from "../components/ApiKeyForm";
+import ClaudeApiKeyForm from "../components/ClaudeApiKeyForm";
 import TaskPanel from "../components/TaskPanel";
+import aiService from "../services/ai-service";
 
 // Separate component to use the context
 const MainContent: React.FC = () => {
   const { apiKeySet, isLoading, setApiKey } = useTodoistAgent();
+  const [claudeApiKeySet, setClaudeApiKeySet] = useState(false);
   
+  useEffect(() => {
+    setClaudeApiKeySet(aiService.hasApiKey());
+  }, []);
+
+  const handleClaudeApiKey = (apiKey: string) => {
+    aiService.setApiKey(apiKey);
+    setClaudeApiKeySet(true);
+  };
+  
+  // Show Claude API key form first if not set
+  if (!claudeApiKeySet) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4">
+        <ClaudeApiKeyForm onSubmit={handleClaudeApiKey} isLoading={false} />
+      </div>
+    );
+  }
+
+  // Then show Todoist API key form if not set
+  if (!apiKeySet) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4">
+        <ApiKeyForm onSubmit={setApiKey} isLoading={isLoading} />
+      </div>
+    );
+  }
+
+  // Show main interface when both API keys are set
   return (
     <>
-      {!apiKeySet ? (
-        <div className="flex-1 flex items-center justify-center p-4">
-          <ApiKeyForm onSubmit={setApiKey} isLoading={isLoading} />
-        </div>
-      ) : (
-        <>
-          <div className="flex-1 md:w-3/4 h-full md:border-r overflow-hidden">
-            <ChatInterface />
-          </div>
-          <div className="w-full md:w-1/4 p-4 overflow-auto">
-            <TaskPanel />
-          </div>
-        </>
-      )}
+      <div className="flex-1 md:w-3/4 h-full md:border-r overflow-hidden">
+        <ChatInterface />
+      </div>
+      <div className="w-full md:w-1/4 p-4 overflow-auto">
+        <TaskPanel />
+      </div>
     </>
   );
 };
