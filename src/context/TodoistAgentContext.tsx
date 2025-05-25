@@ -130,14 +130,21 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       console.log("Adding AI response message:", aiMessage);
       addMessage(aiMessage);
       
-      // Check if the AI intended to create a task - but don't refresh automatically
+      // Check if the AI intended to create a task or update a task
       if (apiKeySet) {
         await handleTaskCreationIntent(response, content, createTask, addMessage);
-        // Only refresh if a task was actually created
+        
+        // Check if a task was created or updated and refresh accordingly
         const taskCreated = response.toLowerCase().includes("i'll create a task");
-        if (taskCreated) {
-          console.log("Task creation detected, refreshing tasks");
-          await refreshTasks();
+        const taskUpdated = response.toLowerCase().includes("i'll update the due date") || 
+                           response.toLowerCase().includes("i'll change the due date");
+        
+        if (taskCreated || taskUpdated) {
+          console.log("Task operation detected, refreshing tasks");
+          // Add a small delay to allow the task operation to complete
+          setTimeout(async () => {
+            await refreshTasks();
+          }, 1000);
         }
       }
     } catch (error) {

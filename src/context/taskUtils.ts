@@ -68,19 +68,81 @@ export const handleTaskCreationIntent = async (
     }
   }
   else if (taskUpdateMatch) {
-    // In a real application, you would implement the task update logic here
-    // For now, we'll just acknowledge that we detected the intent
-    console.log(`Detected task update intent: Update "${taskUpdateMatch[1]}" due date to "${taskUpdateMatch[2]}"`);
+    const taskName = taskUpdateMatch[1];
+    const newDueDate = taskUpdateMatch[2];
     
-    // Add a confirmation message to the chat
-    const confirmationMessage: Message = {
-      id: Math.random().toString(36).substring(2, 11),
-      content: `✅ I've updated the due date for task "${taskUpdateMatch[1]}" to ${taskUpdateMatch[2]}.`,
-      role: "assistant",
-      timestamp: new Date(),
-    };
+    console.log(`Detected task update intent: Update "${taskName}" due date to "${newDueDate}"`);
     
-    addMessageToChat(confirmationMessage);
+    try {
+      // First, get all tasks to find the one to update
+      const tasksResponse = await todoistApi.getTasks();
+      
+      if (tasksResponse.success && tasksResponse.data) {
+        const tasks: TodoistTask[] = tasksResponse.data;
+        const taskToUpdate = tasks.find(task => 
+          task.content.toLowerCase().includes(taskName.toLowerCase())
+        );
+        
+        if (taskToUpdate) {
+          console.log(`Found task to update: ${taskToUpdate.id} - ${taskToUpdate.content}`);
+          
+          // Update the task with new due date
+          const updateResponse = await todoistApi.updateTask(taskToUpdate.id, {
+            due_string: newDueDate
+          });
+          
+          if (updateResponse.success) {
+            // Add a confirmation message to the chat
+            const confirmationMessage: Message = {
+              id: Math.random().toString(36).substring(2, 11),
+              content: `✅ Task "${taskName}" due date has been updated to ${newDueDate}.`,
+              role: "assistant",
+              timestamp: new Date(),
+            };
+            
+            addMessageToChat(confirmationMessage);
+          } else {
+            console.error("Failed to update task:", updateResponse.error);
+            
+            // Add an error message to the chat
+            const errorMessage: Message = {
+              id: Math.random().toString(36).substring(2, 11),
+              content: `❌ Failed to update task "${taskName}". Please try again.`,
+              role: "assistant",
+              timestamp: new Date(),
+            };
+            
+            addMessageToChat(errorMessage);
+          }
+        } else {
+          console.log(`Task "${taskName}" not found in current tasks`);
+          
+          // Add a message indicating task not found
+          const notFoundMessage: Message = {
+            id: Math.random().toString(36).substring(2, 11),
+            content: `❌ Task "${taskName}" not found. Please check the task name and try again.`,
+            role: "assistant",
+            timestamp: new Date(),
+          };
+          
+          addMessageToChat(notFoundMessage);
+        }
+      } else {
+        console.error("Failed to fetch tasks for update:", tasksResponse.error);
+      }
+    } catch (error) {
+      console.error("Error updating task from AI intent:", error);
+      
+      // Add an error message to the chat
+      const errorMessage: Message = {
+        id: Math.random().toString(36).substring(2, 11),
+        content: `❌ Error updating task "${taskName}". Please try again.`,
+        role: "assistant",
+        timestamp: new Date(),
+      };
+      
+      addMessageToChat(errorMessage);
+    }
   }
 };
 

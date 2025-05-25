@@ -86,7 +86,7 @@ export class TodoistApi {
     }
   }
 
-  public async updateTask(taskId: string, updates: Partial<TodoistTask>): Promise<TodoistApiResponse> {
+  public async updateTask(taskId: string, updates: any): Promise<TodoistApiResponse> {
     try {
       console.log("Updating task via Edge Function:", { taskId, updates });
 
