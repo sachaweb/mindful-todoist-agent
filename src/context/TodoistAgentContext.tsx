@@ -140,11 +140,11 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
                            response.toLowerCase().includes("i'll change the due date");
         
         if (taskCreated || taskUpdated) {
-          console.log("Task operation detected, refreshing tasks");
-          // Add a small delay to allow the task operation to complete
+          console.log("Task operation detected, scheduling delayed refresh");
+          // Add a longer delay to avoid rate limiting
           setTimeout(async () => {
             await refreshTasks();
-          }, 1000);
+          }, 3000); // Increased from 1 second to 3 seconds
         }
       }
     } catch (error) {

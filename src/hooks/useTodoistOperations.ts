@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 import todoistApi from "../services/todoist-api";
@@ -29,11 +30,21 @@ export const useTodoistOperations = () => {
         return true;
       } else {
         setApiKeySet(false);
-        toast({
-          title: "Error",
-          description: "Failed to connect to Todoist. Please check your setup.",
-          variant: "destructive",
-        });
+        
+        // Show specific message for rate limiting
+        if (response.error && response.error.includes('Rate limited')) {
+          toast({
+            title: "Rate Limited",
+            description: response.error,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to connect to Todoist. Please check your setup.",
+            variant: "destructive",
+          });
+        }
         return false;
       }
     } catch (error) {
@@ -72,7 +83,7 @@ export const useTodoistOperations = () => {
       console.error("Error refreshing tasks:", error);
       
       // Check if it's a rate limiting error
-      if (error instanceof Error && error.message.includes('429')) {
+      if (error instanceof Error && (error.message.includes('429') || error.message.includes('Rate limited'))) {
         toast({
           title: "Rate Limited",
           description: "Too many requests to Todoist. Please wait a moment before trying again.",
@@ -110,11 +121,20 @@ export const useTodoistOperations = () => {
         });
         return true;
       } else {
-        toast({
-          title: "Error",
-          description: response.error || "Failed to create task.",
-          variant: "destructive",
-        });
+        // Show specific message for rate limiting
+        if (response.error && response.error.includes('Rate limited')) {
+          toast({
+            title: "Rate Limited",
+            description: response.error,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: response.error || "Failed to create task.",
+            variant: "destructive",
+          });
+        }
         return false;
       }
     } catch (error) {
@@ -151,11 +171,20 @@ export const useTodoistOperations = () => {
         });
         return true;
       } else {
-        toast({
-          title: "Error",
-          description: response.error || "Failed to complete task.",
-          variant: "destructive",
-        });
+        // Show specific message for rate limiting
+        if (response.error && response.error.includes('Rate limited')) {
+          toast({
+            title: "Rate Limited",
+            description: response.error,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: response.error || "Failed to complete task.",
+            variant: "destructive",
+          });
+        }
         return false;
       }
     } catch (error) {
