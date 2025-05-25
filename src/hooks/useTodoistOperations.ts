@@ -19,7 +19,7 @@ export const useTodoistOperations = () => {
       
       if (response.success) {
         setApiKeySet(true);
-        await refreshTasks();
+        // Don't auto-refresh here to avoid loops
         
         toast({
           title: "Success",
@@ -50,10 +50,15 @@ export const useTodoistOperations = () => {
     }
   };
 
-  // Function to refresh tasks from Todoist
+  // Function to refresh tasks from Todoist with rate limiting protection
   const refreshTasks = async (): Promise<void> => {
     if (!todoistApi.hasApiKey()) {
       console.log("No Todoist API key set, skipping task refresh");
+      return;
+    }
+    
+    if (isLoading) {
+      console.log("Already loading, skipping duplicate refresh");
       return;
     }
     
@@ -65,11 +70,21 @@ export const useTodoistOperations = () => {
       setTasks(fetchedTasks);
     } catch (error) {
       console.error("Error refreshing tasks:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch your tasks. Please check your internet connection.",
-        variant: "destructive",
-      });
+      
+      // Check if it's a rate limiting error
+      if (error instanceof Error && error.message.includes('429')) {
+        toast({
+          title: "Rate Limited",
+          description: "Too many requests to Todoist. Please wait a moment before trying again.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to fetch your tasks. Please check your internet connection.",
+          variant: "destructive",
+        });
+      }
       // Don't clear tasks on error, keep the existing ones
     } finally {
       setIsLoading(false);
@@ -78,12 +93,17 @@ export const useTodoistOperations = () => {
 
   // Function to create a new task
   const createTask = async (content: string, due?: string, priority?: number, labels?: string[]): Promise<boolean> => {
+    if (isLoading) {
+      console.log("Already loading, skipping task creation");
+      return false;
+    }
+    
     setIsLoading(true);
     try {
       const response = await todoistApi.createTask(content, due, priority, labels);
       
       if (response.success) {
-        await refreshTasks();
+        // Don't auto-refresh here to avoid loops
         toast({
           title: "Success",
           description: "Task created successfully!",
@@ -112,12 +132,19 @@ export const useTodoistOperations = () => {
 
   // Function to complete a task
   const completeTask = async (taskId: string): Promise<boolean> => {
+    if (isLoading) {
+      console.log("Already loading, skipping task completion");
+      return false;
+    }
+    
     setIsLoading(true);
     try {
       const response = await todoistApi.completeTask(taskId);
       
       if (response.success) {
-        await refreshTasks();
+        // Manually remove the completed task from state instead of refreshing
+        setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+        
         toast({
           title: "Success",
           description: "Task completed!",

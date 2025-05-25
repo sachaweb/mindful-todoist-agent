@@ -21,7 +21,7 @@ const TaskPanel: React.FC = () => {
         <h2 className="text-lg font-semibold">Your Tasks</h2>
         <button
           onClick={handleRefresh}
-          className="text-xs text-gray-500 hover:text-todoist-red flex items-center"
+          className="text-xs text-gray-500 hover:text-todoist-red flex items-center disabled:opacity-50"
           disabled={isLoading}
         >
           {isLoading ? "Loading..." : "Refresh"}

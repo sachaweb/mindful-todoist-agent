@@ -31,20 +31,22 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     initializeMessages
   } = useMessageHandler();
 
-  // Initialize on mount
+  // Initialize on mount - but only once
   useEffect(() => {
     console.log("TodoistAgentProvider initialized");
     initializeMessages();
     
-    // If API key is set, fetch tasks
+    // Only fetch tasks once on initialization if API key is set
     if (apiKeySet) {
       refreshTasks().catch(error => {
         console.error("Failed to refresh tasks during initialization:", error);
-        // Don't get stuck in loading state
         setIsLoading(false);
       });
+    } else {
+      // Ensure loading state is false if no API key
+      setIsLoading(false);
     }
-  }, [apiKeySet, initializeMessages, refreshTasks, setIsLoading]);
+  }, []); // Remove apiKeySet from dependencies to prevent re-initialization
 
   // Update suggestions when tasks change
   useEffect(() => {
@@ -61,7 +63,7 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       // Add confirmation message
       const newMessage: Message = {
         id: Math.random().toString(36).substring(2, 11),
-        content: "API key set successfully! I can now help you manage your Todoist tasks.",
+        content: "Connected to Todoist successfully! I can now help you manage your tasks.",
         role: "assistant",
         timestamp: new Date(),
       };
@@ -128,10 +130,15 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       console.log("Adding AI response message:", aiMessage);
       addMessage(aiMessage);
       
-      // Check if the AI intended to create a task
+      // Check if the AI intended to create a task - but don't refresh automatically
       if (apiKeySet) {
         await handleTaskCreationIntent(response, content, createTask, addMessage);
-        await refreshTasks();
+        // Only refresh if a task was actually created
+        const taskCreated = response.toLowerCase().includes("i'll create a task");
+        if (taskCreated) {
+          console.log("Task creation detected, refreshing tasks");
+          await refreshTasks();
+        }
       }
     } catch (error) {
       console.error("Error processing message:", error);
