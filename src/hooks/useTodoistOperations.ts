@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 import todoistApi from "../services/todoist-api";
@@ -117,6 +118,12 @@ export const useTodoistOperations = () => {
           title: "Success",
           description: "Task created successfully!",
         });
+        
+        // Optimistically add the new task to local state instead of refreshing
+        if (response.data) {
+          setTasks(prevTasks => [...prevTasks, response.data]);
+        }
+        
         return true;
       } else {
         // Show specific message for rate limiting
@@ -202,6 +209,7 @@ export const useTodoistOperations = () => {
     isLoading,
     setIsLoading,
     tasks,
+    setTasks, // Expose setTasks for optimistic updates
     apiKeySet,
     setApiKey,
     refreshTasks,

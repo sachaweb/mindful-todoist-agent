@@ -15,6 +15,7 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     isLoading, 
     setIsLoading,
     tasks, 
+    setTasks,
     apiKeySet, 
     setApiKey: setTodoistApiKey, 
     refreshTasks, 
@@ -35,7 +36,6 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
   useEffect(() => {
     console.log("TodoistAgentProvider initialized");
     initializeMessages();
-    // Remove automatic task fetching on initialization to prevent rate limiting
     setIsLoading(false);
   }, []);
 
@@ -64,6 +64,17 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
     }
     
     return success;
+  };
+
+  // Optimistic task update function
+  const updateTaskOptimistically = (taskId: string, updates: any) => {
+    setTasks(prevTasks => 
+      prevTasks.map(task => 
+        task.id === taskId 
+          ? { ...task, ...updates }
+          : task
+      )
+    );
   };
 
   // Function to send a message to the AI
@@ -123,10 +134,17 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       
       // Check if the AI intended to create a task or update a task
       if (apiKeySet) {
-        await handleTaskCreationIntent(response, content, createTask, addMessage);
+        // Pass existing tasks to avoid unnecessary API calls
+        await handleTaskCreationIntent(
+          response, 
+          content, 
+          createTask, 
+          addMessage,
+          tasks // Pass current tasks instead of fetching
+        );
         
-        // Remove automatic task refresh after operations to prevent rate limiting
-        // Tasks will be updated via manual refresh or when user explicitly requests it
+        // Only refresh tasks if a task was actually created/updated
+        // We'll handle this more intelligently in the task operations
       }
     } catch (error) {
       console.error("Error processing message:", error);
