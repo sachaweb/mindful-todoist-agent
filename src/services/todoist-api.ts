@@ -5,24 +5,55 @@ import { supabase } from "@/integrations/supabase/client";
 export class TodoistApi {
   private apiKeySet: boolean = true; // Always true since we use Edge Function
   private lastRequestTime: number = 0;
-  private minRequestInterval: number = 1000; // Minimum 1 second between requests
+  private minRequestInterval: number = 5000; // Increased to 5 seconds between requests
+  private requestQueue: Array<() => Promise<any>> = [];
+  private isProcessingQueue: boolean = false;
 
   constructor() {
     // No need to manage API key locally anymore
   }
 
-  private async rateLimitedRequest(requestFn: () => Promise<any>): Promise<any> {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-    
-    if (timeSinceLastRequest < this.minRequestInterval) {
-      const delay = this.minRequestInterval - timeSinceLastRequest;
-      console.log(`Rate limiting: waiting ${delay}ms before next request`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+  private async processQueue(): Promise<void> {
+    if (this.isProcessingQueue || this.requestQueue.length === 0) {
+      return;
     }
-    
-    this.lastRequestTime = Date.now();
-    return await requestFn();
+
+    this.isProcessingQueue = true;
+
+    while (this.requestQueue.length > 0) {
+      const requestFn = this.requestQueue.shift();
+      if (requestFn) {
+        const now = Date.now();
+        const timeSinceLastRequest = now - this.lastRequestTime;
+        
+        if (timeSinceLastRequest < this.minRequestInterval) {
+          const delay = this.minRequestInterval - timeSinceLastRequest;
+          console.log(`Rate limiting: waiting ${delay}ms before next request`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
+        this.lastRequestTime = Date.now();
+        await requestFn();
+      }
+    }
+
+    this.isProcessingQueue = false;
+  }
+
+  private async queueRequest<T>(requestFn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const wrappedRequest = async () => {
+        try {
+          const result = await requestFn();
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      
+      this.requestQueue.push(wrappedRequest);
+      this.processQueue();
+    });
   }
 
   // API Key management - simplified since Edge Function handles the key
@@ -35,9 +66,9 @@ export class TodoistApi {
     return this.apiKeySet;
   }
 
-  // Task operations using Edge Function
+  // Task operations using Edge Function with queue
   public async getTasks(): Promise<TodoistApiResponse> {
-    return this.rateLimitedRequest(async () => {
+    return this.queueRequest(async () => {
       try {
         console.log("Calling Edge Function to get tasks...");
         
@@ -74,7 +105,7 @@ export class TodoistApi {
   }
 
   public async createTask(content: string, due?: string, priority?: number, labels?: string[]): Promise<TodoistApiResponse> {
-    return this.rateLimitedRequest(async () => {
+    return this.queueRequest(async () => {
       try {
         console.log("Creating task via Edge Function:", { content, due, priority, labels });
 
@@ -119,7 +150,7 @@ export class TodoistApi {
   }
 
   public async updateTask(taskId: string, updates: any): Promise<TodoistApiResponse> {
-    return this.rateLimitedRequest(async () => {
+    return this.queueRequest(async () => {
       try {
         console.log("Updating task via Edge Function:", { taskId, updates });
 
@@ -159,7 +190,7 @@ export class TodoistApi {
   }
 
   public async completeTask(taskId: string): Promise<TodoistApiResponse> {
-    return this.rateLimitedRequest(async () => {
+    return this.queueRequest(async () => {
       try {
         console.log("Completing task via Edge Function:", taskId);
 

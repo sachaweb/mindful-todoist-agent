@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 import todoistApi from "../services/todoist-api";
@@ -20,7 +19,7 @@ export const useTodoistOperations = () => {
       
       if (response.success) {
         setApiKeySet(true);
-        // Don't auto-refresh here to avoid loops
+        setTasks(response.data || []);
         
         toast({
           title: "Success",
@@ -114,7 +113,6 @@ export const useTodoistOperations = () => {
       const response = await todoistApi.createTask(content, due, priority, labels);
       
       if (response.success) {
-        // Don't auto-refresh here to avoid loops
         toast({
           title: "Success",
           description: "Task created successfully!",

@@ -35,18 +35,9 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
   useEffect(() => {
     console.log("TodoistAgentProvider initialized");
     initializeMessages();
-    
-    // Only fetch tasks once on initialization if API key is set
-    if (apiKeySet) {
-      refreshTasks().catch(error => {
-        console.error("Failed to refresh tasks during initialization:", error);
-        setIsLoading(false);
-      });
-    } else {
-      // Ensure loading state is false if no API key
-      setIsLoading(false);
-    }
-  }, []); // Remove apiKeySet from dependencies to prevent re-initialization
+    // Remove automatic task fetching on initialization to prevent rate limiting
+    setIsLoading(false);
+  }, []);
 
   // Update suggestions when tasks change
   useEffect(() => {
@@ -134,18 +125,8 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       if (apiKeySet) {
         await handleTaskCreationIntent(response, content, createTask, addMessage);
         
-        // Check if a task was created or updated and refresh accordingly
-        const taskCreated = response.toLowerCase().includes("i'll create a task");
-        const taskUpdated = response.toLowerCase().includes("i'll update the due date") || 
-                           response.toLowerCase().includes("i'll change the due date");
-        
-        if (taskCreated || taskUpdated) {
-          console.log("Task operation detected, scheduling delayed refresh");
-          // Add a longer delay to avoid rate limiting
-          setTimeout(async () => {
-            await refreshTasks();
-          }, 3000); // Increased from 1 second to 3 seconds
-        }
+        // Remove automatic task refresh after operations to prevent rate limiting
+        // Tasks will be updated via manual refresh or when user explicitly requests it
       }
     } catch (error) {
       console.error("Error processing message:", error);
