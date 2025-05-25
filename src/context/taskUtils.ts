@@ -86,13 +86,24 @@ export const handleTaskCreationIntent = async (
 
 // Function to refresh tasks from Todoist
 export const fetchTasks = async (): Promise<TodoistTask[]> => {
-  if (!todoistApi.hasApiKey()) return [];
-  
-  const response = await todoistApi.getTasks();
-  
-  if (response.success && response.data) {
-    return response.data;
+  if (!todoistApi.hasApiKey()) {
+    console.log("No Todoist API key available");
+    return [];
   }
   
-  return [];
+  try {
+    console.log("Fetching tasks from Todoist API...");
+    const response = await todoistApi.getTasks();
+    
+    if (response.success && response.data) {
+      console.log("Successfully fetched tasks:", response.data);
+      return response.data;
+    } else {
+      console.error("Failed to fetch tasks:", response.error);
+      return [];
+    }
+  } catch (error) {
+    console.error("Error in fetchTasks:", error);
+    return [];
+  }
 };

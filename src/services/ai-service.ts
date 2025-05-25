@@ -1,4 +1,3 @@
-
 import { Message, TodoistTask, ConversationContext } from "../types";
 
 export class AiService {
@@ -52,53 +51,54 @@ export class AiService {
     this.context.lastQuery = message;
     this.saveContext();
 
-    // Generate response using Claude
-    const response = await this.generateClaudeResponse(message, tasks);
-    console.log("Claude response:", response);
+    try {
+      // Generate response using Claude
+      const response = await this.generateClaudeResponse(message, tasks);
+      console.log("Claude response:", response);
 
-    // Add AI response to context
-    this.addMessageToContext({
-      id: this.generateId(),
-      content: response,
-      role: "assistant",
-      timestamp: new Date(),
-    });
+      // Add AI response to context
+      this.addMessageToContext({
+        id: this.generateId(),
+        content: response,
+        role: "assistant",
+        timestamp: new Date(),
+      });
 
-    this.saveContext();
-    return response;
+      this.saveContext();
+      return response;
+    } catch (error) {
+      console.error("Error in processMessage:", error);
+      return "I'm having trouble connecting to the AI service right now. Please check your Claude API key and try again.";
+    }
   }
 
   private async generateClaudeResponse(message: string, tasks: TodoistTask[]): Promise<string> {
-    try {
-      const systemPrompt = this.buildSystemPrompt(tasks);
-      const conversationHistory = this.buildConversationHistory();
+    const systemPrompt = this.buildSystemPrompt(tasks);
+    const conversationHistory = this.buildConversationHistory();
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": this.apiKey!,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-3-haiku-20240307",
-          max_tokens: 1000,
-          system: systemPrompt,
-          messages: [...conversationHistory, { role: "user", content: message }],
-        }),
-      });
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": this.apiKey!,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-3-haiku-20240307",
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: [...conversationHistory, { role: "user", content: message }],
+      }),
+    });
 
-      if (!response.ok) {
-        console.error("Claude API error:", response.status, response.statusText);
-        return "Sorry, I encountered an error while processing your request. Please check your API key and try again.";
-      }
-
-      const data = await response.json();
-      return data.content[0].text;
-    } catch (error) {
-      console.error("Error calling Claude API:", error);
-      return "Sorry, I encountered an error while processing your request. Please try again.";
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "Unknown error");
+      console.error("Claude API error:", response.status, response.statusText, errorText);
+      throw new Error(`Claude API error: ${response.status} ${response.statusText}`);
     }
+
+    const data = await response.json();
+    return data.content[0].text;
   }
 
   private buildSystemPrompt(tasks: TodoistTask[]): string {

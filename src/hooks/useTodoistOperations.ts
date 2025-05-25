@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 import todoistApi from "../services/todoist-api";
@@ -32,6 +31,7 @@ export const useTodoistOperations = () => {
         return true;
       } else {
         todoistApi.setApiKey(''); // Clear the invalid API key
+        setApiKeySet(false);
         toast({
           title: "Error",
           description: "Invalid Todoist API key. Please check and try again.",
@@ -42,9 +42,10 @@ export const useTodoistOperations = () => {
     } catch (error) {
       console.error("Error setting API key:", error);
       todoistApi.setApiKey(''); // Clear the API key on error
+      setApiKeySet(false);
       toast({
         title: "Error",
-        description: "Failed to set Todoist API key. Please try again.",
+        description: "Failed to connect to Todoist. Please check your API key and internet connection.",
         variant: "destructive",
       });
       return false;
@@ -55,21 +56,25 @@ export const useTodoistOperations = () => {
 
   // Function to refresh tasks from Todoist
   const refreshTasks = async (): Promise<void> => {
-    if (!todoistApi.hasApiKey()) return;
+    if (!todoistApi.hasApiKey()) {
+      console.log("No Todoist API key set, skipping task refresh");
+      return;
+    }
     
     setIsLoading(true);
     try {
+      console.log("Attempting to fetch tasks from Todoist...");
       const fetchedTasks = await fetchTasks();
+      console.log("Successfully fetched tasks:", fetchedTasks);
       setTasks(fetchedTasks);
     } catch (error) {
       console.error("Error refreshing tasks:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch your tasks. Please try again.",
+        description: "Failed to fetch your tasks. Please check your internet connection.",
         variant: "destructive",
       });
-      // Set empty tasks array to prevent UI from being stuck
-      setTasks([]);
+      // Don't clear tasks on error, keep the existing ones
     } finally {
       setIsLoading(false);
     }
@@ -145,7 +150,7 @@ export const useTodoistOperations = () => {
 
   return {
     isLoading,
-    setIsLoading, // Add setIsLoading to the return object
+    setIsLoading,
     tasks,
     apiKeySet,
     setApiKey,
