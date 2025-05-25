@@ -1,10 +1,11 @@
+
 import { TodoistTask, TodoistApiResponse } from "../types";
 import { supabase } from "@/integrations/supabase/client";
 
 export class TodoistApi {
   private apiKeySet: boolean = true; // Always true since we use Edge Function
   private lastRequestTime: number = 0;
-  private minRequestInterval: number = 5000; // 5 seconds between requests
+  private minRequestInterval: number = 2000; // Reduced to 2 seconds since we're making fewer calls
   private requestQueue: Array<() => Promise<any>> = [];
   private isProcessingQueue: boolean = false;
 
@@ -74,7 +75,7 @@ export class TodoistApi {
         const { data, error } = await supabase.functions.invoke('todoist-proxy', {
           body: { 
             action: 'getTasks',
-            data: { filter } // Pass filter to Edge Function
+            data: filter ? { filter } : {} // Only pass filter if it exists
           }
         });
 

@@ -26,11 +26,11 @@ serve(async (req) => {
       case 'getTasks':
         let url = `${TODOIST_API_URL}/tasks`;
         
-        // Add filter parameter if provided
+        // For text searches, we'll get all tasks and filter on the server side
+        // since Todoist's filter syntax is complex and doesn't support simple text search
         if (data?.filter) {
-          const encodedFilter = encodeURIComponent(data.filter);
-          url += `?filter=${encodedFilter}`;
-          console.log('Using filtered query:', url);
+          console.log('Fetching all tasks to search for:', data.filter);
+          // Just get all tasks - we'll filter them after the API call
         }
         
         response = await fetch(url, {
@@ -40,6 +40,28 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
         });
+        
+        if (response.ok) {
+          const tasks = await response.json();
+          
+          // If we have a filter, search through tasks by content
+          if (data?.filter && Array.isArray(tasks)) {
+            const searchTerm = data.filter.toLowerCase();
+            const filteredTasks = tasks.filter(task => 
+              task.content && task.content.toLowerCase().includes(searchTerm)
+            );
+            console.log(`Found ${filteredTasks.length} tasks matching "${data.filter}"`);
+            
+            return new Response(JSON.stringify({ success: true, data: filteredTasks }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          
+          // Return all tasks if no filter
+          return new Response(JSON.stringify({ success: true, data: tasks }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
         break;
         
       case 'createTask':
