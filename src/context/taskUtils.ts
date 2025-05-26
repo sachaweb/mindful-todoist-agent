@@ -1,3 +1,4 @@
+
 import { Message, TodoistTask } from "../types";
 import todoistApi from "../services/todoist-api";
 
@@ -25,16 +26,20 @@ export const handleTaskCreationIntent = async (
     const taskMatches = tasksSection.match(/"([^"]+)"/g);
     
     if (taskMatches && taskMatches.length > 0) {
-      console.log(`🎯 Creating ${taskMatches.length} separate tasks`);
+      console.log(`🎯 Creating ${taskMatches.length} separate tasks from current command only`);
+      
+      // Convert matches to unique task contents to prevent duplicates
+      const uniqueTaskContents = [...new Set(taskMatches.map(match => match.replace(/"/g, '').trim()))];
+      console.log("Unique tasks to create:", uniqueTaskContents);
       
       let successCount = 0;
       let failureCount = 0;
       const createdTasks: string[] = [];
       
-      for (const taskMatch of taskMatches) {
-        const taskContent = taskMatch.replace(/"/g, '').trim();
+      // Process each unique task exactly once
+      for (const taskContent of uniqueTaskContents) {
         if (taskContent) {
-          console.log(`🚀 Creating individual task: "${taskContent}"`);
+          console.log(`🚀 Creating task: "${taskContent}"`);
           
           try {
             const success = await createTask(taskContent, undefined, 1, []);
