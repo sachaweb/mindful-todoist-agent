@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import todoistApi from "../services/todoist-api";
 import { TodoistTask } from '../types';
 import { fetchTasks } from '../context/taskUtils';
@@ -13,12 +13,19 @@ export const useTodoistOperations = () => {
 
   // Function to set the API key - simplified since Edge Function handles it
   const setApiKey = async (key: string): Promise<boolean> => {
+    if (isLoading) {
+      console.log("Already loading, skipping API key setup");
+      return false;
+    }
+    
     setIsLoading(true);
     try {
+      console.log("Testing Todoist connection...");
       // Verify the Edge Function works by fetching tasks
       const response = await todoistApi.getTasks();
       
       if (response.success) {
+        console.log("Todoist connection successful");
         setApiKeySet(true);
         setTasks(response.data || []);
         
@@ -29,6 +36,7 @@ export const useTodoistOperations = () => {
         
         return true;
       } else {
+        console.error("Todoist connection failed:", response.error);
         setApiKeySet(false);
         
         // Show specific message for rate limiting
@@ -40,8 +48,8 @@ export const useTodoistOperations = () => {
           });
         } else {
           toast({
-            title: "Error",
-            description: "Failed to connect to Todoist. Please check your setup.",
+            title: "Connection Failed",
+            description: response.error || "Failed to connect to Todoist. Please check your setup.",
             variant: "destructive",
           });
         }
@@ -51,8 +59,8 @@ export const useTodoistOperations = () => {
       console.error("Error testing Todoist connection:", error);
       setApiKeySet(false);
       toast({
-        title: "Error",
-        description: "Failed to connect to Todoist. Please check your setup.",
+        title: "Connection Error",
+        description: "Unable to connect to Todoist. Please check your internet connection and try again.",
         variant: "destructive",
       });
       return false;
@@ -75,10 +83,15 @@ export const useTodoistOperations = () => {
     
     setIsLoading(true);
     try {
-      console.log("Attempting to fetch tasks from Todoist...");
+      console.log("Refreshing tasks from Todoist...");
       const fetchedTasks = await fetchTasks();
-      console.log("Successfully fetched tasks:", fetchedTasks);
+      console.log("Successfully refreshed tasks:", fetchedTasks.length, "tasks found");
       setTasks(fetchedTasks);
+      
+      toast({
+        title: "Tasks Updated",
+        description: `Loaded ${fetchedTasks.length} tasks from Todoist`,
+      });
     } catch (error) {
       console.error("Error refreshing tasks:", error);
       
@@ -91,8 +104,8 @@ export const useTodoistOperations = () => {
         });
       } else {
         toast({
-          title: "Error",
-          description: "Failed to fetch your tasks. Please check your internet connection.",
+          title: "Refresh Failed",
+          description: "Failed to fetch your latest tasks. Your existing tasks are still available.",
           variant: "destructive",
         });
       }
@@ -106,6 +119,11 @@ export const useTodoistOperations = () => {
   const createTask = async (content: string, due?: string, priority?: number, labels?: string[]): Promise<boolean> => {
     if (isLoading) {
       console.log("Already loading, skipping task creation");
+      toast({
+        title: "Please Wait",
+        description: "Another operation is in progress. Please wait and try again.",
+        variant: "destructive",
+      });
       return false;
     }
     
@@ -120,14 +138,18 @@ export const useTodoistOperations = () => {
         console.log("Task created successfully:", response.data);
         
         toast({
-          title: "Success",
-          description: "Task created successfully!",
+          title: "Task Created",
+          description: `Successfully created: "${content}"`,
         });
         
         // Optimistically add the new task to local state instead of refreshing
         if (response.data) {
           console.log("Adding new task to local state:", response.data);
           setTasks(prevTasks => [...prevTasks, response.data]);
+        } else {
+          // If no task data returned, refresh to get the latest state
+          console.log("No task data in response, refreshing tasks");
+          await refreshTasks();
         }
         
         return true;
@@ -143,8 +165,8 @@ export const useTodoistOperations = () => {
           });
         } else {
           toast({
-            title: "Error",
-            description: response.error || "Failed to create task.",
+            title: "Creation Failed",
+            description: response.error || "Failed to create task. Please try again.",
             variant: "destructive",
           });
         }
@@ -153,8 +175,8 @@ export const useTodoistOperations = () => {
     } catch (error) {
       console.error("Error creating task:", error);
       toast({
-        title: "Error",
-        description: "Failed to create task. Please try again.",
+        title: "Creation Error",
+        description: "Unable to create task. Please check your connection and try again.",
         variant: "destructive",
       });
       return false;
@@ -167,12 +189,22 @@ export const useTodoistOperations = () => {
   const completeTask = async (taskId: string): Promise<boolean> => {
     if (isLoading) {
       console.log("Already loading, skipping task completion");
+      toast({
+        title: "Please Wait",
+        description: "Another operation is in progress. Please wait and try again.",
+        variant: "destructive",
+      });
       return false;
     }
     
     setIsLoading(true);
     try {
       console.log("Completing task:", taskId);
+      
+      // Find the task name for better user feedback
+      const taskToComplete = tasks.find(task => task.id === taskId);
+      const taskName = taskToComplete?.content || "Task";
+      
       const response = await todoistApi.completeTask(taskId);
       
       if (response.success) {
@@ -181,8 +213,8 @@ export const useTodoistOperations = () => {
         setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
         
         toast({
-          title: "Success",
-          description: "Task completed!",
+          title: "Task Completed",
+          description: `"${taskName}" has been marked as complete!`,
         });
         return true;
       } else {
@@ -197,8 +229,8 @@ export const useTodoistOperations = () => {
           });
         } else {
           toast({
-            title: "Error",
-            description: response.error || "Failed to complete task.",
+            title: "Completion Failed",
+            description: response.error || "Failed to complete task. Please try again.",
             variant: "destructive",
           });
         }
@@ -207,8 +239,8 @@ export const useTodoistOperations = () => {
     } catch (error) {
       console.error("Error completing task:", error);
       toast({
-        title: "Error",
-        description: "Failed to complete task. Please try again.",
+        title: "Completion Error",
+        description: "Unable to complete task. Please check your connection and try again.",
         variant: "destructive",
       });
       return false;
