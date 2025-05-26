@@ -1,4 +1,3 @@
-
 import { Message, TodoistTask, ConversationContext } from "../types";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -99,11 +98,12 @@ Current open tasks:
 ${taskList}
 
 IMPORTANT TASK CREATION RULES:
-- When a user wants to create a task, you MUST respond with the EXACT phrase: "I'll create a task" followed by the task content in quotes.
-- Examples:
-  * User: "Create a task: Buy groceries" → You: "I'll create a task "Buy groceries"."
-  * User: "Add buy milk to my tasks" → You: "I'll create a task "Buy milk"."
-  * User: "Remind me to call John tomorrow" → You: "I'll create a task "Call John" with due date tomorrow."
+- When a user wants to create a SINGLE task, respond with: "I'll create a task "[task content]"."
+- When a user wants to create MULTIPLE tasks, respond with: "I'll create the following [number] tasks:" followed by each task on a new line in quotes.
+
+Examples:
+* Single task: User: "Create a task: Buy groceries" → You: "I'll create a task "Buy groceries"."
+* Multiple tasks: User: "Create 3 tasks: buy groceries, call dentist, and finish report" → You: "I'll create the following 3 tasks:\n"Buy groceries"\n"Call dentist"\n"Finish report""
 
 - When a user wants to update a task due date, respond with: "I'll update the due date for your task "[task name]" to [new date]."
 

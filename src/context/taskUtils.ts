@@ -12,7 +12,73 @@ export const handleTaskCreationIntent = async (
   console.log("AI Response:", aiResponse);
   console.log("User Message:", userMessage);
   
-  // Improved regex patterns for task creation detection
+  // Check for multiple task creation intent first
+  const multipleTaskPattern = /I'll create (?:the following )?(\d+) tasks?[:\s]*\n?((?:"[^"]+"\s*\n?)*)/i;
+  const multipleTaskMatch = aiResponse.match(multipleTaskPattern);
+  
+  if (multipleTaskMatch) {
+    console.log("✓ Multiple task creation detected");
+    const taskCount = parseInt(multipleTaskMatch[1]);
+    const tasksSection = multipleTaskMatch[2] || "";
+    
+    // Extract individual task names from quoted strings
+    const taskMatches = tasksSection.match(/"([^"]+)"/g);
+    
+    if (taskMatches && taskMatches.length > 0) {
+      console.log(`🎯 Creating ${taskMatches.length} separate tasks`);
+      
+      let successCount = 0;
+      let failureCount = 0;
+      const createdTasks: string[] = [];
+      
+      for (const taskMatch of taskMatches) {
+        const taskContent = taskMatch.replace(/"/g, '').trim();
+        if (taskContent) {
+          console.log(`🚀 Creating individual task: "${taskContent}"`);
+          
+          try {
+            const success = await createTask(taskContent, undefined, 1, []);
+            if (success) {
+              successCount++;
+              createdTasks.push(taskContent);
+              console.log(`✅ Successfully created: "${taskContent}"`);
+            } else {
+              failureCount++;
+              console.log(`❌ Failed to create: "${taskContent}"`);
+            }
+          } catch (error) {
+            failureCount++;
+            console.error(`💥 Error creating task "${taskContent}":`, error);
+          }
+        }
+      }
+      
+      // Add summary message to chat
+      let summaryMessage = "";
+      if (successCount > 0) {
+        summaryMessage += `✅ Successfully created ${successCount} task${successCount > 1 ? 's' : ''}:\n`;
+        createdTasks.forEach(task => {
+          summaryMessage += `• ${task}\n`;
+        });
+      }
+      
+      if (failureCount > 0) {
+        summaryMessage += `❌ Failed to create ${failureCount} task${failureCount > 1 ? 's' : ''}.`;
+      }
+      
+      const confirmationMessage: Message = {
+        id: Math.random().toString(36).substring(2, 11),
+        content: summaryMessage.trim(),
+        role: "assistant",
+        timestamp: new Date(),
+      };
+      
+      addMessageToChat(confirmationMessage);
+      return; // Exit early since we handled multiple tasks
+    }
+  }
+  
+  // Fallback to original single task creation logic
   const taskCreationPatterns = [
     /I'll create (?:a )?task[:\s]*"?([^"]+)"?(?:\s*with due date\s+([^.?!]+))?/i,
     /I'll create (?:a )?task[:\s]*([^.?!]+?)(?:\s*with due date\s+([^.?!]+))?(?:\s*for you)?[.!]?$/i,
@@ -39,7 +105,7 @@ export const handleTaskCreationIntent = async (
       taskContent = match[1].trim();
       dueDate = match[2] ? match[2].trim() : "";
       matchFound = true;
-      console.log("✓ Task creation pattern matched in AI response:", { taskContent, dueDate });
+      console.log("✓ Single task creation pattern matched in AI response:", { taskContent, dueDate });
       break;
     }
   }
@@ -54,7 +120,7 @@ export const handleTaskCreationIntent = async (
         const dueDateMatch = userMessage.match(/(?:due|by|on)\s+([^.?!]+)/i);
         dueDate = dueDateMatch ? dueDateMatch[1].trim() : "";
         matchFound = true;
-        console.log("✓ Task creation pattern matched in user message:", { taskContent, dueDate });
+        console.log("✓ Single task creation pattern matched in user message:", { taskContent, dueDate });
         break;
       }
     }
@@ -67,7 +133,7 @@ export const handleTaskCreationIntent = async (
   if (matchFound && taskContent) {
     let priority = 1; // Default priority
     
-    console.log(`🎯 CREATING TASK: "${taskContent}" due: "${dueDate}"`);
+    console.log(`🎯 CREATING SINGLE TASK: "${taskContent}" due: "${dueDate}"`);
     
     // Check if high priority was mentioned
     if (aiResponse.toLowerCase().includes("high priority") || 
