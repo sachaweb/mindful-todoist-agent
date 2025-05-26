@@ -1,3 +1,4 @@
+
 import { Message, TodoistTask, ConversationContext } from "../types";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -34,8 +35,8 @@ export class AiService {
       timestamp: new Date(),
     });
 
-    // Update tasks in context
-    this.context.openTasks = tasks;
+    // Update tasks in context - use current tasks only, don't carry over
+    this.context.openTasks = [...tasks]; // Create fresh copy
     this.context.lastQuery = message;
     this.saveContext();
 
@@ -68,7 +69,7 @@ export class AiService {
     const { data, error } = await supabase.functions.invoke('claude-proxy', {
       body: {
         message,
-        tasks,
+        tasks: [...tasks], // Send fresh copy of current tasks only
         systemPrompt,
         conversationHistory
       }
@@ -99,7 +100,9 @@ ${taskList}
 
 IMPORTANT TASK CREATION RULES:
 - When a user wants to create a SINGLE task, respond with: "I'll create a task "[task content]"."
-- When a user wants to create MULTIPLE tasks, respond with: "I'll create the following [number] tasks:" followed by each task on a new line in quotes.
+- When a user wants to create MULTIPLE tasks, respond with: "I'll create the following [exact number] tasks:" followed by each task on a new line in quotes.
+- ONLY respond with the tasks from the CURRENT user message - do not include any tasks from previous messages.
+- Count the tasks carefully and use the exact number in your response.
 
 Examples:
 * Single task: User: "Create a task: Buy groceries" → You: "I'll create a task "Buy groceries"."

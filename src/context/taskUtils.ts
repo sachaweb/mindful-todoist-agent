@@ -1,4 +1,3 @@
-
 import { Message, TodoistTask } from "../types";
 import todoistApi from "../services/todoist-api";
 
@@ -26,11 +25,26 @@ export const handleTaskCreationIntent = async (
     const taskMatches = tasksSection.match(/"([^"]+)"/g);
     
     if (taskMatches && taskMatches.length > 0) {
-      console.log(`🎯 Creating ${taskMatches.length} separate tasks from current command only`);
+      console.log(`🎯 Processing ONLY current batch command with ${taskMatches.length} tasks`);
       
-      // Convert matches to unique task contents to prevent duplicates
-      const uniqueTaskContents = [...new Set(taskMatches.map(match => match.replace(/"/g, '').trim()))];
-      console.log("Unique tasks to create:", uniqueTaskContents);
+      // Convert matches to unique task contents and clean them
+      const uniqueTaskContents = [...new Set(
+        taskMatches
+          .map(match => match.replace(/"/g, '').trim())
+          .filter(task => task.length > 0) // Remove empty tasks
+      )];
+      
+      console.log("Final unique tasks to create from current command:", uniqueTaskContents);
+      console.log("Expected task count from AI response:", taskCount);
+      console.log("Actual tasks extracted:", uniqueTaskContents.length);
+      
+      // Validate that we're not processing more tasks than requested
+      if (uniqueTaskContents.length > taskCount) {
+        console.warn("⚠️ More tasks extracted than expected - possible contamination from previous responses");
+        // Take only the number of tasks mentioned in the AI response
+        uniqueTaskContents.splice(taskCount);
+        console.log("Trimmed to expected count:", uniqueTaskContents);
+      }
       
       let successCount = 0;
       let failureCount = 0;
@@ -79,6 +93,7 @@ export const handleTaskCreationIntent = async (
       };
       
       addMessageToChat(confirmationMessage);
+      console.log("=== BATCH TASK CREATION COMPLETE ===");
       return; // Exit early since we handled multiple tasks
     }
   }
