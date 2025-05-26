@@ -113,7 +113,9 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
 
   // Function to send a message to the AI
   const sendMessage = async (content: string): Promise<void> => {
-    console.log("sendMessage called with:", content);
+    console.log("=== SEND MESSAGE CALLED ===");
+    console.log("Message content:", content);
+    
     if (!content.trim()) {
       console.log("Message content empty, not sending");
       return;
@@ -168,13 +170,19 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       
       // Check if the AI intended to create a task or update a task
       if (apiKeySet) {
-        console.log("Processing task creation/update intent");
+        console.log("=== PROCESSING TASK CREATION INTENT ===");
+        console.log("API Key is set, checking for task operations");
+        console.log("Response to analyze:", response);
+        console.log("User message:", content);
+        
         await handleTaskCreationIntent(
           response, 
           content, 
           createTask, 
           addMessage
         );
+      } else {
+        console.log("❌ API key not set, skipping task operations");
       }
     } catch (error) {
       console.error("Error processing message:", error);

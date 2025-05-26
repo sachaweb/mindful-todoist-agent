@@ -1,3 +1,4 @@
+
 import { Message, TodoistTask, ConversationContext } from "../types";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -97,13 +98,20 @@ export class AiService {
 Current open tasks:
 ${taskList}
 
-When a user wants to create a task, respond with: "I'll create a task "[task content]" with due date [due date]." (if due date mentioned) or "I'll create a task "[task content]"." (if no due date).
+IMPORTANT TASK CREATION RULES:
+- When a user wants to create a task, you MUST respond with the EXACT phrase: "I'll create a task" followed by the task content in quotes.
+- Examples:
+  * User: "Create a task: Buy groceries" → You: "I'll create a task "Buy groceries"."
+  * User: "Add buy milk to my tasks" → You: "I'll create a task "Buy milk"."
+  * User: "Remind me to call John tomorrow" → You: "I'll create a task "Call John" with due date tomorrow."
 
-When a user wants to update a task due date, respond with: "I'll update the due date for your task "[task name]" to [new date]."
+- When a user wants to update a task due date, respond with: "I'll update the due date for your task "[task name]" to [new date]."
 
-When a user wants to complete a task, acknowledge it naturally.
+- When a user wants to complete a task, acknowledge it naturally and the system will handle completion.
 
-Be conversational, helpful, and focus on task management. Keep responses concise but friendly.`;
+Be conversational and helpful, but ALWAYS use the exact phrases above for task creation and updates so the system can detect and execute them properly.
+
+Keep responses concise but friendly.`;
   }
 
   private buildConversationHistory(): Array<{ role: string; content: string }> {
