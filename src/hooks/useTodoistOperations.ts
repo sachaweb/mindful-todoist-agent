@@ -110,10 +110,15 @@ export const useTodoistOperations = () => {
     }
     
     setIsLoading(true);
+    console.log("Creating task with parameters:", { content, due, priority, labels });
+    
     try {
       const response = await todoistApi.createTask(content, due, priority, labels);
+      console.log("Create task response:", response);
       
       if (response.success) {
+        console.log("Task created successfully:", response.data);
+        
         toast({
           title: "Success",
           description: "Task created successfully!",
@@ -121,11 +126,14 @@ export const useTodoistOperations = () => {
         
         // Optimistically add the new task to local state instead of refreshing
         if (response.data) {
+          console.log("Adding new task to local state:", response.data);
           setTasks(prevTasks => [...prevTasks, response.data]);
         }
         
         return true;
       } else {
+        console.error("Task creation failed:", response.error);
+        
         // Show specific message for rate limiting
         if (response.error && response.error.includes('Rate limited')) {
           toast({
@@ -164,9 +172,11 @@ export const useTodoistOperations = () => {
     
     setIsLoading(true);
     try {
+      console.log("Completing task:", taskId);
       const response = await todoistApi.completeTask(taskId);
       
       if (response.success) {
+        console.log("Task completed successfully");
         // Manually remove the completed task from state instead of refreshing
         setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
         
@@ -176,6 +186,8 @@ export const useTodoistOperations = () => {
         });
         return true;
       } else {
+        console.error("Task completion failed:", response.error);
+        
         // Show specific message for rate limiting
         if (response.error && response.error.includes('Rate limited')) {
           toast({

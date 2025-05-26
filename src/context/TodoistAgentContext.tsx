@@ -123,14 +123,13 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({ chil
       
       // Check if the AI intended to create a task or update a task
       if (apiKeySet) {
-        // Use more efficient task handling - no need to pass existing tasks
-        // The handleTaskCreationIntent function will now use targeted searches
+        console.log("Processing task creation/update intent");
+        // Fixed function call - removed the existingTasks parameter that was causing issues
         await handleTaskCreationIntent(
           response, 
           content, 
           createTask, 
           addMessage
-          // Removed tasks parameter - function will use targeted searches instead
         );
       }
     } catch (error) {

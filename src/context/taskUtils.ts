@@ -7,8 +7,7 @@ export const handleTaskCreationIntent = async (
   aiResponse: string,
   userMessage: string,
   createTask: (content: string, due?: string, priority?: number, labels?: string[]) => Promise<boolean>,
-  addMessageToChat: (message: Message) => void,
-  existingTasks: TodoistTask[] = []
+  addMessageToChat: (message: Message) => void
 ): Promise<void> => {
   console.log("Checking for task creation intent in:", aiResponse);
   
@@ -28,13 +27,13 @@ export const handleTaskCreationIntent = async (
     console.log(`Detected task creation intent: "${content}" due: "${dueDate}"`);
     
     // Check if high priority was mentioned
-    if (aiResponse.toLowerCase().includes("high priority")) {
+    if (aiResponse.toLowerCase().includes("high priority") || userMessage.toLowerCase().includes("urgent")) {
       priority = 4;
     }
     
     // Extract labels if mentioned
     const labels: string[] = [];
-    if (aiResponse.toLowerCase().includes("labels")) {
+    if (aiResponse.toLowerCase().includes("label") || userMessage.toLowerCase().includes("label")) {
       const labelRegex = /labels? ([\w\s,]+)/i;
       const labelMatch = aiResponse.match(labelRegex);
       if (labelMatch) {
@@ -47,21 +46,43 @@ export const handleTaskCreationIntent = async (
     if (content) {
       try {
         console.log(`Creating task: "${content}", due: "${dueDate}", priority: ${priority}, labels: [${labels.join(", ")}]`);
-        const success = await createTask(content, dueDate, priority, labels);
+        const success = await createTask(content, dueDate || undefined, priority, labels);
         
         if (success) {
           // Add a confirmation message to the chat
           const confirmationMessage: Message = {
             id: Math.random().toString(36).substring(2, 11),
-            content: `✅ Task "${content}" has been created${dueDate ? ` with due date ${dueDate}` : ''}.`,
+            content: `✅ Task "${content}" has been created successfully${dueDate ? ` with due date ${dueDate}` : ''}.`,
             role: "assistant",
             timestamp: new Date(),
           };
           
+          console.log("Task created successfully, adding confirmation message");
           addMessageToChat(confirmationMessage);
+        } else {
+          // Add error message if task creation failed
+          const errorMessage: Message = {
+            id: Math.random().toString(36).substring(2, 11),
+            content: `❌ Failed to create task "${content}". Please try again.`,
+            role: "assistant",
+            timestamp: new Date(),
+          };
+          
+          console.log("Task creation failed, adding error message");
+          addMessageToChat(errorMessage);
         }
       } catch (error) {
         console.error("Error creating task from AI intent:", error);
+        
+        // Add error message to chat
+        const errorMessage: Message = {
+          id: Math.random().toString(36).substring(2, 11),
+          content: `❌ Error creating task "${content}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+          role: "assistant",
+          timestamp: new Date(),
+        };
+        
+        addMessageToChat(errorMessage);
       }
     }
   }
@@ -72,7 +93,7 @@ export const handleTaskCreationIntent = async (
     console.log(`Detected task update intent: Update "${taskName}" due date to "${newDueDate}"`);
     
     try {
-      // Use targeted search instead of relying on existing tasks
+      // Use targeted search to find the task
       console.log(`Searching for tasks containing: "${taskName}"`);
       const searchResponse = await todoistApi.searchTasks(taskName);
       
