@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import todoistApi from "../services/todoist-api";
@@ -115,7 +114,7 @@ export const useTodoistOperations = () => {
     }
   };
 
-  // Function to create a new task
+  // Function to create a new task with correct parameter names
   const createTask = async (content: string, due?: string, priority?: number, labels?: string[]): Promise<boolean> => {
     if (isLoading) {
       console.log("Already loading, skipping task creation");
@@ -131,15 +130,25 @@ export const useTodoistOperations = () => {
     console.log("Creating task with parameters:", { content, due, priority, labels });
     
     try {
+      // Use due_string parameter name for Todoist API
       const response = await todoistApi.createTask(content, due, priority, labels);
       console.log("Create task response:", response);
       
       if (response.success) {
         console.log("Task created successfully:", response.data);
         
+        // Build success message with details
+        let successMessage = `Successfully created: "${content}"`;
+        if (due) successMessage += ` (Due: ${due})`;
+        if (priority && priority > 1) {
+          const priorityLabel = priority === 4 ? 'P1-Highest' : priority === 3 ? 'P2-High' : priority === 2 ? 'P3-Medium' : 'P4-Low';
+          successMessage += ` (Priority: ${priorityLabel})`;
+        }
+        if (labels && labels.length > 0) successMessage += ` (Labels: ${labels.join(', ')})`;
+        
         toast({
           title: "Task Created",
-          description: `Successfully created: "${content}"`,
+          description: successMessage,
         });
         
         // Optimistically add the new task to local state instead of refreshing
