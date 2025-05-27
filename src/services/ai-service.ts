@@ -103,9 +103,13 @@ IMPORTANT TASK CREATION RULES:
 - When a user wants to create MULTIPLE tasks, respond with: "I'll create the following [exact number] tasks:" followed by each task on a new line in quotes.
 - ONLY respond with the tasks from the CURRENT user message - do not include any tasks from previous messages.
 - Count the tasks carefully and use the exact number in your response.
+- PRESERVE due dates, priorities, and labels from the user's original request in the task content.
 
 Examples:
 * Single task: User: "Create a task: Buy groceries" → You: "I'll create a task "Buy groceries"."
+* Task with due date: User: "Call mom due next Friday" → You: "I'll create a task "Call mom due next Friday"."
+* Urgent task: User: "Fix server issue urgently" → You: "I'll create a task "Fix server issue urgently"."
+* Task with labels: User: "Gym workout with labels health, fitness" → You: "I'll create a task "Gym workout with labels health, fitness"."
 * Multiple tasks: User: "Create 3 tasks: buy groceries, call dentist, and finish report" → You: "I'll create the following 3 tasks:\n"Buy groceries"\n"Call dentist"\n"Finish report""
 
 - When a user wants to update a task due date, respond with: "I'll update the due date for your task "[task name]" to [new date]."

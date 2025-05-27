@@ -1,3 +1,4 @@
+
 import { Message, TodoistTask } from "../types";
 import todoistApi from "../services/todoist-api";
 
@@ -55,19 +56,22 @@ export const handleTaskCreationIntent = async (
         if (taskContent) {
           console.log(`🚀 Creating task: "${taskContent}"`);
           
+          // Parse due date, priority, and labels for each task
+          const { cleanContent, dueDate, priority, labels } = parseTaskDetails(taskContent, userMessage);
+          
           try {
-            const success = await createTask(taskContent, undefined, 1, []);
+            const success = await createTask(cleanContent, dueDate, priority, labels);
             if (success) {
               successCount++;
-              createdTasks.push(taskContent);
-              console.log(`✅ Successfully created: "${taskContent}"`);
+              createdTasks.push(cleanContent);
+              console.log(`✅ Successfully created: "${cleanContent}"`);
             } else {
               failureCount++;
-              console.log(`❌ Failed to create: "${taskContent}"`);
+              console.log(`❌ Failed to create: "${cleanContent}"`);
             }
           } catch (error) {
             failureCount++;
-            console.error(`💥 Error creating task "${taskContent}":`, error);
+            console.error(`💥 Error creating task "${cleanContent}":`, error);
           }
         }
       }
@@ -136,11 +140,8 @@ export const handleTaskCreationIntent = async (
       const match = userMessage.match(pattern);
       if (match) {
         taskContent = match[1].trim();
-        // Extract due date from user message if present
-        const dueDateMatch = userMessage.match(/(?:due|by|on)\s+([^.?!]+)/i);
-        dueDate = dueDateMatch ? dueDateMatch[1].trim() : "";
         matchFound = true;
-        console.log("✓ Single task creation pattern matched in user message:", { taskContent, dueDate });
+        console.log("✓ Single task creation pattern matched in user message:", { taskContent });
         break;
       }
     }
@@ -151,41 +152,24 @@ export const handleTaskCreationIntent = async (
   const taskUpdateMatch = aiResponse.match(taskUpdateRegex);
   
   if (matchFound && taskContent) {
-    let priority = 1; // Default priority
+    console.log(`🎯 CREATING SINGLE TASK: "${taskContent}"`);
     
-    console.log(`🎯 CREATING SINGLE TASK: "${taskContent}" due: "${dueDate}"`);
+    // Parse task details from both user message and task content
+    const { cleanContent, dueDate: parsedDueDate, priority, labels } = parseTaskDetails(taskContent, userMessage);
+    const finalDueDate = dueDate || parsedDueDate; // Use AI-provided due date if available, otherwise parsed
     
-    // Check if high priority was mentioned
-    if (aiResponse.toLowerCase().includes("high priority") || 
-        aiResponse.toLowerCase().includes("urgent") || 
-        userMessage.toLowerCase().includes("urgent") ||
-        userMessage.toLowerCase().includes("important")) {
-      priority = 4;
-      console.log("⚡ High priority detected");
-    }
-    
-    // Extract labels if mentioned
-    const labels: string[] = [];
-    if (aiResponse.toLowerCase().includes("label") || userMessage.toLowerCase().includes("label")) {
-      const labelRegex = /labels?\s+([\w\s,]+)/i;
-      const labelMatch = aiResponse.match(labelRegex) || userMessage.match(labelRegex);
-      if (labelMatch) {
-        const labelText = labelMatch[1];
-        labels.push(...labelText.split(",").map(l => l.trim()));
-        console.log("🏷️ Labels detected:", labels);
-      }
-    }
+    console.log(`📋 Task details:`, { cleanContent, finalDueDate, priority, labels });
     
     // Create the task
     try {
-      console.log(`🚀 Calling createTask API with:`, { taskContent, dueDate, priority, labels });
-      const success = await createTask(taskContent, dueDate || undefined, priority, labels);
+      console.log(`🚀 Calling createTask API with:`, { cleanContent, finalDueDate, priority, labels });
+      const success = await createTask(cleanContent, finalDueDate || undefined, priority, labels);
       
       if (success) {
         // Add a confirmation message to the chat
         const confirmationMessage: Message = {
           id: Math.random().toString(36).substring(2, 11),
-          content: `✅ Task "${taskContent}" has been created successfully in Todoist${dueDate ? ` with due date ${dueDate}` : ''}.`,
+          content: `✅ Task "${cleanContent}" has been created successfully in Todoist${finalDueDate ? ` with due date ${finalDueDate}` : ''}${priority > 1 ? ` (Priority: ${priority})` : ''}${labels.length > 0 ? ` with labels: ${labels.join(', ')}` : ''}.`,
           role: "assistant",
           timestamp: new Date(),
         };
@@ -196,7 +180,7 @@ export const handleTaskCreationIntent = async (
         // Add error message if task creation failed
         const errorMessage: Message = {
           id: Math.random().toString(36).substring(2, 11),
-          content: `❌ Failed to create task "${taskContent}" in Todoist. Please try again or check your connection.`,
+          content: `❌ Failed to create task "${cleanContent}" in Todoist. Please try again or check your connection.`,
           role: "assistant",
           timestamp: new Date(),
         };
@@ -210,7 +194,7 @@ export const handleTaskCreationIntent = async (
       // Add error message to chat
       const errorMessage: Message = {
         id: Math.random().toString(36).substring(2, 11),
-        content: `❌ Error creating task "${taskContent}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: `❌ Error creating task "${cleanContent}": ${error instanceof Error ? error.message : 'Unknown error'}`,
         role: "assistant",
         timestamp: new Date(),
       };
@@ -311,6 +295,104 @@ export const handleTaskCreationIntent = async (
     console.log("❌ No task creation or update intent detected");
   }
 };
+
+// New function to parse task details from content and user message
+function parseTaskDetails(taskContent: string, userMessage: string): {
+  cleanContent: string;
+  dueDate: string | undefined;
+  priority: number;
+  labels: string[];
+} {
+  let cleanContent = taskContent;
+  let dueDate: string | undefined;
+  let priority = 1; // Default priority (lowest in Todoist API)
+  let labels: string[] = [];
+
+  // Extract due date from task content or user message
+  const dueDatePatterns = [
+    /due\s+(next\s+\w+)/i,
+    /due\s+(tomorrow|today)/i,
+    /due\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+    /due\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}/i,
+    /due\s+(\d{1,2}\/\d{1,2}\/\d{4})/i,
+    /due\s+(\d{1,2}\/\d{1,2})/i,
+    /due\s+(\d{4}-\d{2}-\d{2})/i,
+    /due\s+(.*?)(?:\s|$)/i // Catch-all for other due date formats
+  ];
+
+  // Check task content first
+  for (const pattern of dueDatePatterns) {
+    const match = taskContent.match(pattern);
+    if (match) {
+      dueDate = match[1].trim();
+      // Remove the due date part from task content
+      cleanContent = taskContent.replace(match[0], '').trim();
+      console.log(`📅 Due date extracted from task content: "${dueDate}"`);
+      break;
+    }
+  }
+
+  // If no due date found in task content, check user message
+  if (!dueDate) {
+    for (const pattern of dueDatePatterns) {
+      const match = userMessage.match(pattern);
+      if (match) {
+        dueDate = match[1].trim();
+        console.log(`📅 Due date extracted from user message: "${dueDate}"`);
+        break;
+      }
+    }
+  }
+
+  // Extract priority - Todoist API uses 1=lowest, 4=highest
+  const priorityPatterns = [
+    { pattern: /\b(urgent|critical|asap|immediately|high.priority|p1)\b/i, priority: 4 },
+    { pattern: /\b(important|high|p2)\b/i, priority: 3 },
+    { pattern: /\b(medium|normal|p3)\b/i, priority: 2 },
+    { pattern: /\b(low|minor|p4)\b/i, priority: 1 }
+  ];
+
+  // Check both task content and user message for priority keywords
+  const fullText = `${taskContent} ${userMessage}`.toLowerCase();
+  for (const { pattern, priority: priorityValue } of priorityPatterns) {
+    if (pattern.test(fullText)) {
+      priority = priorityValue;
+      console.log(`⚡ Priority detected: ${priorityValue} (from pattern: ${pattern})`);
+      break;
+    }
+  }
+
+  // Extract labels
+  const labelPatterns = [
+    /with\s+labels?\s+([\w\s,]+)/i,
+    /labels?\s+([\w\s,]+)/i
+  ];
+
+  for (const pattern of labelPatterns) {
+    const match = userMessage.match(pattern) || taskContent.match(pattern);
+    if (match) {
+      const labelText = match[1];
+      // Split by comma and clean up
+      labels = labelText
+        .split(',')
+        .map(label => label.trim().toLowerCase())
+        .filter(label => label.length > 0 && !['and', 'with'].includes(label));
+      
+      console.log(`🏷️ Labels extracted: ${labels.join(', ')}`);
+      
+      // Remove label text from clean content
+      cleanContent = cleanContent.replace(match[0], '').trim();
+      break;
+    }
+  }
+
+  return {
+    cleanContent,
+    dueDate,
+    priority,
+    labels
+  };
+}
 
 // Function to refresh tasks from Todoist with optional filtering
 export const fetchTasks = async (filter?: string): Promise<TodoistTask[]> => {
