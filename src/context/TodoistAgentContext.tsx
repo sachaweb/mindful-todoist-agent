@@ -5,7 +5,7 @@ import React, {
   useCallback,
   useEffect,
 } from "react";
-import { Message } from "../types";
+import { Message, TodoistTask } from "../types";
 import { useMessageHandler } from "@/hooks/useMessageHandler";
 import { useTodoistOperations } from "@/hooks/useTodoistOperations";
 import aiService from "../services/ai-service";
@@ -15,6 +15,7 @@ interface TodoistAgentContextProps {
   suggestions: string[];
   isLoading: boolean;
   apiKeySet: boolean;
+  tasks: TodoistTask[];
   setApiKey: (apiKey: string) => Promise<boolean>;
   sendMessage: (content: string) => void;
   refreshTasks: () => void;
@@ -125,6 +126,7 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({
     suggestions,
     isLoading,
     apiKeySet,
+    tasks,
     setApiKey,
     sendMessage,
     refreshTasks,
