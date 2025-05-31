@@ -12,10 +12,9 @@ const TaskPanel: React.FC = () => {
     console.log("TaskPanel rendered with tasks:", tasks);
   }, [tasks]);
 
-  const handleRefresh = async () => {
-    console.log("Manually refreshing tasks");
+  const handleManualRefresh = async () => {
+    console.log("Manual refresh requested");
     await refreshTasks();
-    // Show toast only for manual refresh
     toast({
       title: "Tasks Updated",
       description: `Loaded ${tasks.length} tasks from Todoist`,
@@ -27,11 +26,11 @@ const TaskPanel: React.FC = () => {
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Your Tasks</h2>
         <button
-          onClick={handleRefresh}
-          className="text-xs text-gray-500 hover:text-todoist-red flex items-center disabled:opacity-50"
+          onClick={handleManualRefresh}
+          className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={isLoading}
         >
-          {isLoading ? "Loading..." : "Refresh"}
+          {isLoading ? "Refreshing..." : "Refresh Tasks"}
         </button>
       </div>
       <TaskList tasks={tasks} onCompleteTask={completeTask} isLoading={isLoading} />

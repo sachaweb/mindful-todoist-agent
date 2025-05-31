@@ -10,6 +10,7 @@ import React, {
 import { Message, TodoistTask } from "../types";
 import { useMessageHandler } from "@/hooks/useMessageHandler";
 import { useTodoistOperations } from "@/hooks/useTodoistOperations";
+import { useTaskOperations } from "@/hooks/useTaskOperations";
 import aiService from "../services/ai-service";
 
 interface TodoistAgentContextProps {
@@ -36,22 +37,10 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({
   children,
 }) => {
   const { messages, suggestions, addMessage, setMessages, generateSuggestions, initializeMessages } = useMessageHandler();
-  const { isLoading, setIsLoading, apiKeySet, setApiKey, refreshTasks: originalRefreshTasks, createTask, completeTask, tasks, setTasks } = useTodoistOperations();
+  const { isLoading, setIsLoading, apiKeySet, setApiKey, refreshTasks, createTask, completeTask, tasks } = useTodoistOperations();
+  const { processUserInput, isProcessing } = useTaskOperations();
   
-  // Use refs to prevent multiple initializations
   const isInitialized = useRef(false);
-  const lastTaskCount = useRef<number>(0);
-
-  // Wrap refreshTasks to prevent spam
-  const refreshTasks = useCallback(async () => {
-    if (isLoading) {
-      console.log("Skipping refresh - already loading");
-      return;
-    }
-    
-    console.log("Refreshing tasks...");
-    await originalRefreshTasks();
-  }, [originalRefreshTasks, isLoading]);
 
   // Initialize only once
   useEffect(() => {
@@ -63,28 +52,25 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({
     }
   }, [initializeMessages, refreshTasks]);
 
-  // Generate suggestions only when task count changes (not on every task array change)
+  // Generate suggestions when tasks change
   useEffect(() => {
-    if (tasks.length !== lastTaskCount.current) {
-      console.log(`Task count changed from ${lastTaskCount.current} to ${tasks.length}, generating suggestions`);
-      lastTaskCount.current = tasks.length;
+    if (tasks.length > 0) {
       generateSuggestions(tasks);
     }
-  }, [tasks.length, generateSuggestions]);
+  }, [tasks, generateSuggestions]);
 
   const sendMessage = useCallback(async (content: string) => {
-    if (isLoading) {
-      console.log("Already processing a message, ignoring new message");
+    if (isLoading || isProcessing) {
+      console.log("Already processing, ignoring new message");
       return;
     }
 
     console.log("TodoistAgentProvider - sendMessage called with:", content);
 
-    setIsLoading(true);
     const userMessageId = Math.random().toString(36).substring(2, 11);
     const aiMessageId = Math.random().toString(36).substring(2, 11);
 
-    // Optimistically add user message to the chat
+    // Add user message
     const userMessage: Message = {
       id: userMessageId,
       content: content,
@@ -93,61 +79,57 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({
     };
     addMessage(userMessage);
 
-    // Add temporary AI message with "sending" status
-    const aiMessage: Message = {
-      id: aiMessageId,
-      content: "Thinking...",
-      role: "assistant",
-      timestamp: new Date(),
-      status: "sending",
-    };
-    addMessage(aiMessage);
-
+    // Check if this is a task operation first
     try {
-      // Generate AI response
-      console.log("Generating AI response for:", content);
-      const aiResponse = await aiService.processMessage(content, tasks);
-      console.log("Generated AI response:", aiResponse);
-
-      // Update the AI message with the response
-      setMessages(prevMessages => 
-        prevMessages.map(msg => 
-          msg.id === aiMessageId 
-            ? { ...msg, content: aiResponse, status: undefined }
-            : msg
-        )
-      );
-
-      // Only generate suggestions if this was a task-related message
-      if (content.toLowerCase().includes('task') || content.toLowerCase().includes('create') || content.toLowerCase().includes('add')) {
-        // Small delay to prevent suggestion generation conflicts
-        setTimeout(() => {
-          generateSuggestions(tasks);
-        }, 500);
-      }
+      await processUserInput(content, tasks, addMessage, createTask);
     } catch (error) {
-      console.error("Error in sendMessage:", error);
-      // Update AI message with error
-      setMessages(prevMessages =>
-        prevMessages.map(msg =>
-          msg.id === aiMessageId
-            ? {
-              ...msg,
-              content: "Sorry, I encountered an error. Please try again.",
-              status: "error",
-            }
-            : msg
-        )
-      );
-    } finally {
-      setIsLoading(false);
+      console.error("Error processing task operation:", error);
+      
+      // Fall back to AI service for non-task messages
+      setIsLoading(true);
+      
+      const aiMessage: Message = {
+        id: aiMessageId,
+        content: "Thinking...",
+        role: "assistant",
+        timestamp: new Date(),
+        status: "sending",
+      };
+      addMessage(aiMessage);
+
+      try {
+        const aiResponse = await aiService.processMessage(content, tasks);
+        
+        setMessages(prevMessages => 
+          prevMessages.map(msg => 
+            msg.id === aiMessageId 
+              ? { ...msg, content: aiResponse, status: undefined }
+              : msg
+          )
+        );
+      } catch (aiError) {
+        console.error("Error in AI service:", aiError);
+        setMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg.id === aiMessageId
+              ? {
+                ...msg,
+                content: "Sorry, I encountered an error. Please try again.",
+                status: "error",
+              }
+              : msg
+          )
+        );
+      } finally {
+        setIsLoading(false);
+      }
     }
-  }, [isLoading, addMessage, tasks, generateSuggestions, setMessages, setIsLoading]);
+  }, [isLoading, isProcessing, addMessage, tasks, createTask, setMessages, setIsLoading, processUserInput]);
 
   const value: TodoistAgentContextProps = {
     messages,
     suggestions,
-    isLoading,
+    isLoading: isLoading || isProcessing,
     apiKeySet,
     tasks,
     setApiKey,
