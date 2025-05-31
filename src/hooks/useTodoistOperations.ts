@@ -68,7 +68,7 @@ export const useTodoistOperations = () => {
     }
   };
 
-  // Function to refresh tasks from Todoist with rate limiting protection
+  // Function to refresh tasks from Todoist - removed toast to prevent spam
   const refreshTasks = async (): Promise<void> => {
     if (!todoistApi.hasApiKey()) {
       console.log("No Todoist API key set, skipping task refresh");
@@ -87,10 +87,8 @@ export const useTodoistOperations = () => {
       console.log("Successfully refreshed tasks:", fetchedTasks.length, "tasks found");
       setTasks(fetchedTasks);
       
-      toast({
-        title: "Tasks Updated",
-        description: `Loaded ${fetchedTasks.length} tasks from Todoist`,
-      });
+      // Only show toast for manual refresh, not automatic ones
+      // This prevents the spam of "Tasks Updated" messages
     } catch (error) {
       console.error("Error refreshing tasks:", error);
       

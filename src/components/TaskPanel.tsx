@@ -2,17 +2,24 @@
 import React, { useEffect } from "react";
 import TaskList from "./TaskList";
 import { useTodoistAgent } from "../context/TodoistAgentContext";
+import { useToast } from "@/hooks/use-toast";
 
 const TaskPanel: React.FC = () => {
   const { tasks, isLoading, refreshTasks, completeTask } = useTodoistAgent();
+  const { toast } = useToast();
   
   useEffect(() => {
     console.log("TaskPanel rendered with tasks:", tasks);
   }, [tasks]);
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     console.log("Manually refreshing tasks");
-    refreshTasks();
+    await refreshTasks();
+    // Show toast only for manual refresh
+    toast({
+      title: "Tasks Updated",
+      description: `Loaded ${tasks.length} tasks from Todoist`,
+    });
   };
 
   return (

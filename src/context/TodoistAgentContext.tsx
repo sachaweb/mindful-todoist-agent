@@ -1,9 +1,11 @@
+
 import React, {
   createContext,
   useState,
   useContext,
   useCallback,
   useEffect,
+  useRef,
 } from "react";
 import { Message, TodoistTask } from "../types";
 import { useMessageHandler } from "@/hooks/useMessageHandler";
@@ -34,16 +36,41 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({
   children,
 }) => {
   const { messages, suggestions, addMessage, setMessages, generateSuggestions, initializeMessages } = useMessageHandler();
-  const { isLoading, setIsLoading, apiKeySet, setApiKey, refreshTasks, createTask, completeTask, tasks, setTasks } = useTodoistOperations();
+  const { isLoading, setIsLoading, apiKeySet, setApiKey, refreshTasks: originalRefreshTasks, createTask, completeTask, tasks, setTasks } = useTodoistOperations();
+  
+  // Use refs to prevent multiple initializations
+  const isInitialized = useRef(false);
+  const lastTaskCount = useRef<number>(0);
 
+  // Wrap refreshTasks to prevent spam
+  const refreshTasks = useCallback(async () => {
+    if (isLoading) {
+      console.log("Skipping refresh - already loading");
+      return;
+    }
+    
+    console.log("Refreshing tasks...");
+    await originalRefreshTasks();
+  }, [originalRefreshTasks, isLoading]);
+
+  // Initialize only once
   useEffect(() => {
-    initializeMessages();
-    refreshTasks();
+    if (!isInitialized.current) {
+      console.log("Initializing TodoistAgentProvider...");
+      isInitialized.current = true;
+      initializeMessages();
+      refreshTasks();
+    }
   }, [initializeMessages, refreshTasks]);
 
+  // Generate suggestions only when task count changes (not on every task array change)
   useEffect(() => {
-    generateSuggestions(tasks);
-  }, [tasks, generateSuggestions]);
+    if (tasks.length !== lastTaskCount.current) {
+      console.log(`Task count changed from ${lastTaskCount.current} to ${tasks.length}, generating suggestions`);
+      lastTaskCount.current = tasks.length;
+      generateSuggestions(tasks);
+    }
+  }, [tasks.length, generateSuggestions]);
 
   const sendMessage = useCallback(async (content: string) => {
     if (isLoading) {
@@ -91,17 +118,13 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({
         )
       );
 
-      // Handle task creation intent with existing tasks
-      console.log("Checking for task creation intent...");
-      // await handleTaskCreationIntent(
-      //   aiResponse,
-      //   content,
-      //   createTask,
-      //   addMessage,
-      //   tasks // Pass current tasks for duplicate detection
-      // );
-
-      generateSuggestions(tasks);
+      // Only generate suggestions if this was a task-related message
+      if (content.toLowerCase().includes('task') || content.toLowerCase().includes('create') || content.toLowerCase().includes('add')) {
+        // Small delay to prevent suggestion generation conflicts
+        setTimeout(() => {
+          generateSuggestions(tasks);
+        }, 500);
+      }
     } catch (error) {
       console.error("Error in sendMessage:", error);
       // Update AI message with error
@@ -119,7 +142,7 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, createTask, addMessage, tasks, generateSuggestions, setMessages, setIsLoading]);
+  }, [isLoading, addMessage, tasks, generateSuggestions, setMessages, setIsLoading]);
 
   const value: TodoistAgentContextProps = {
     messages,
