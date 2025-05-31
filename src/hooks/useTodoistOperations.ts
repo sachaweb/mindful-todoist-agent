@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import todoistApi from "../services/todoist-api";
 import { TodoistTask } from '../types';
-import { fetchTasks } from '../context/taskUtils';
 
 export const useTodoistOperations = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -67,9 +66,15 @@ export const useTodoistOperations = () => {
     setIsLoading(true);
     try {
       console.log("Refreshing tasks from Todoist...");
-      const fetchedTasks = await fetchTasks();
-      console.log("Successfully refreshed tasks:", fetchedTasks.length, "tasks found");
-      setTasks(fetchedTasks);
+      const response = await todoistApi.getTasks();
+      
+      if (response.success) {
+        const fetchedTasks = response.data || [];
+        console.log("Successfully refreshed tasks:", fetchedTasks.length, "tasks found");
+        setTasks(fetchedTasks);
+      } else {
+        throw new Error(response.error || "Failed to fetch tasks");
+      }
     } catch (error) {
       console.error("Error refreshing tasks:", error);
       
