@@ -5,8 +5,17 @@ import { Message, TodoistTask } from '../types';
 import { parseUserInput, checkForDuplicates, hasAmbiguousPriority } from '../utils/taskParser';
 import todoistApi from '../services/todoist-api';
 
+interface PendingTask {
+  content: string;
+  dueDate?: string;
+  priority: number;
+  labels: string[];
+}
+
 export const useTaskOperations = () => {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [pendingDuplicateTask, setPendingDuplicateTask] = useState<PendingTask | null>(null);
+  const [pendingPriorityTask, setPendingPriorityTask] = useState<PendingTask | null>(null);
   const { toast } = useToast();
 
   const processUserInput = async (
@@ -24,6 +33,57 @@ export const useTaskOperations = () => {
     
     try {
       console.log('🚀 Processing user input:', input);
+      const lowerInput = input.toLowerCase().trim();
+      
+      // Handle confirmation responses first
+      if (pendingDuplicateTask) {
+        if (lowerInput === 'create anyway' || lowerInput === 'proceed') {
+          console.log('✅ User confirmed duplicate task creation');
+          await executeTaskCreation(pendingDuplicateTask, addMessage, createTask);
+          setPendingDuplicateTask(null);
+          setIsProcessing(false);
+          return;
+        } else if (lowerInput === 'cancel' || lowerInput === 'stop' || lowerInput === 'no') {
+          console.log('❌ User cancelled duplicate task creation');
+          const cancelMessage: Message = {
+            id: Math.random().toString(36).substring(2, 11),
+            content: '❌ Task creation cancelled.',
+            role: "assistant",
+            timestamp: new Date(),
+          };
+          addMessage(cancelMessage);
+          setPendingDuplicateTask(null);
+          setIsProcessing(false);
+          return;
+        }
+      }
+      
+      if (pendingPriorityTask) {
+        if (lowerInput.includes('p1') || lowerInput.includes('make it p1')) {
+          const updatedTask = { ...pendingPriorityTask, priority: 4 };
+          await executeTaskCreation(updatedTask, addMessage, createTask);
+          setPendingPriorityTask(null);
+          setIsProcessing(false);
+          return;
+        } else if (lowerInput.includes('p2') || lowerInput.includes('make it p2')) {
+          const updatedTask = { ...pendingPriorityTask, priority: 3 };
+          await executeTaskCreation(updatedTask, addMessage, createTask);
+          setPendingPriorityTask(null);
+          setIsProcessing(false);
+          return;
+        } else if (lowerInput.includes('p3') || lowerInput.includes('make it p3')) {
+          const updatedTask = { ...pendingPriorityTask, priority: 2 };
+          await executeTaskCreation(updatedTask, addMessage, createTask);
+          setPendingPriorityTask(null);
+          setIsProcessing(false);
+          return;
+        } else if (lowerInput === 'proceed' || lowerInput.includes('p4') || lowerInput.includes('make it p4')) {
+          await executeTaskCreation(pendingPriorityTask, addMessage, createTask);
+          setPendingPriorityTask(null);
+          setIsProcessing(false);
+          return;
+        }
+      }
       
       const parsed = parseUserInput(input, existingTasks);
       
@@ -56,6 +116,8 @@ export const useTaskOperations = () => {
       };
       
       addMessage(errorMessage);
+      setPendingDuplicateTask(null);
+      setPendingPriorityTask(null);
       setIsProcessing(false);
     }
   };
@@ -79,9 +141,18 @@ export const useTaskOperations = () => {
       return;
     }
     
+    const taskData: PendingTask = {
+      content: parsed.content,
+      dueDate: parsed.dueDate,
+      priority: parsed.priority,
+      labels: parsed.labels
+    };
+    
     // Check for duplicates
     const duplicates = checkForDuplicates(parsed.content, existingTasks);
     if (duplicates.length > 0) {
+      setPendingDuplicateTask(taskData);
+      
       let duplicateMessage = `🔍 DUPLICATE TASK DETECTED:\n\n`;
       duplicateMessage += `You want to create: "${parsed.content}"\n\n`;
       duplicateMessage += `But I found ${duplicates.length} similar task${duplicates.length > 1 ? 's' : ''}:\n`;
@@ -107,6 +178,8 @@ export const useTaskOperations = () => {
     
     // Check for ambiguous priority
     if (hasAmbiguousPriority(parsed.content)) {
+      setPendingPriorityTask(taskData);
+      
       let priorityMessage = `⚡ PRIORITY CLARIFICATION NEEDED:\n\n`;
       priorityMessage += `You used an ambiguous priority term for: "${parsed.content}"\n\n`;
       priorityMessage += `📊 Todoist Priority Guide:\n`;
@@ -128,19 +201,19 @@ export const useTaskOperations = () => {
     }
     
     // Proceed with task creation
-    await executeTaskCreation(parsed, addMessage, createTask);
+    await executeTaskCreation(taskData, addMessage, createTask);
   };
 
   const executeTaskCreation = async (
-    parsed: any,
+    taskData: PendingTask,
     addMessage: (message: Message) => void,
     createTask: (content: string, due?: string, priority?: number, labels?: string[]) => Promise<boolean>
   ): Promise<void> => {
     let statusMessage = `🎯 CREATING TASK:\n\n`;
-    statusMessage += `📋 Task: "${parsed.content}"\n`;
-    statusMessage += `📅 Due: ${parsed.dueDate || 'None'}\n`;
-    statusMessage += `⚡ Priority: P${5 - parsed.priority}\n`;
-    statusMessage += `🏷️ Labels: ${parsed.labels.length > 0 ? parsed.labels.join(', ') : 'None'}\n\n`;
+    statusMessage += `📋 Task: "${taskData.content}"\n`;
+    statusMessage += `📅 Due: ${taskData.dueDate || 'None'}\n`;
+    statusMessage += `⚡ Priority: P${5 - taskData.priority}\n`;
+    statusMessage += `🏷️ Labels: ${taskData.labels.length > 0 ? taskData.labels.join(', ') : 'None'}\n\n`;
     statusMessage += `⏳ Creating task...`;
     
     const statusMsg: Message = {
@@ -154,16 +227,16 @@ export const useTaskOperations = () => {
     
     try {
       const success = await createTask(
-        parsed.content,
-        parsed.dueDate,
-        parsed.priority,
-        parsed.labels
+        taskData.content,
+        taskData.dueDate,
+        taskData.priority,
+        taskData.labels
       );
       
       if (success) {
         const successMessage: Message = {
           id: Math.random().toString(36).substring(2, 11),
-          content: `✅ SUCCESS: Task "${parsed.content}" created successfully!`,
+          content: `✅ SUCCESS: Task "${taskData.content}" created successfully!`,
           role: "assistant",
           timestamp: new Date(),
         };
@@ -171,7 +244,7 @@ export const useTaskOperations = () => {
       } else {
         const failMessage: Message = {
           id: Math.random().toString(36).substring(2, 11),
-          content: `❌ FAILED: Could not create task "${parsed.content}". Please check your connection and try again.`,
+          content: `❌ FAILED: Could not create task "${taskData.content}". Please check your connection and try again.`,
           role: "assistant",
           timestamp: new Date(),
         };
@@ -285,8 +358,16 @@ export const useTaskOperations = () => {
     }
   };
 
+  const clearPendingOperations = () => {
+    setPendingDuplicateTask(null);
+    setPendingPriorityTask(null);
+  };
+
   return {
     processUserInput,
-    isProcessing
+    isProcessing,
+    pendingDuplicateTask,
+    pendingPriorityTask,
+    clearPendingOperations
   };
 };

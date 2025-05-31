@@ -15,7 +15,31 @@ export interface ParsedTaskDetails {
 export const parseUserInput = (input: string, existingTasks: TodoistTask[] = []): ParsedTaskDetails => {
   console.log('🔍 Parsing user input:', input);
   
-  const lowerInput = input.toLowerCase();
+  const lowerInput = input.toLowerCase().trim();
+  
+  // Don't parse confirmation responses as task creation
+  const confirmationPatterns = [
+    /^create anyway$/i,
+    /^proceed$/i,
+    /^cancel$/i,
+    /^stop$/i,
+    /^yes$/i,
+    /^no$/i,
+    /^make it p[1-4]$/i
+  ];
+  
+  for (const pattern of confirmationPatterns) {
+    if (pattern.test(lowerInput)) {
+      console.log('📋 Detected confirmation response, not parsing as task');
+      return {
+        content: '',
+        priority: 1,
+        labels: [],
+        isTaskCreation: false,
+        isTaskUpdate: false
+      };
+    }
+  }
   
   // Check for task update intent
   const updatePatterns = [
@@ -38,9 +62,13 @@ export const parseUserInput = (input: string, existingTasks: TodoistTask[] = [])
     }
   }
   
-  // Check for task creation intent
+  // Check for task creation intent - be more specific about creation keywords
   const creationKeywords = ['create', 'add', 'new', 'make'];
-  const hasCreationKeyword = creationKeywords.some(keyword => lowerInput.includes(keyword));
+  const hasCreationKeyword = creationKeywords.some(keyword => {
+    // Only match if it's at the start or preceded by whitespace
+    const regex = new RegExp(`(?:^|\\s)${keyword}(?:\\s|$)`, 'i');
+    return regex.test(lowerInput);
+  });
   
   // If it contains task creation keywords or looks like a task description
   const isTaskCreation = hasCreationKeyword || 
@@ -62,7 +90,7 @@ export const parseUserInput = (input: string, existingTasks: TodoistTask[] = [])
   // Extract task content
   let taskContent = input;
   
-  // Remove creation keywords
+  // Remove creation keywords more carefully
   taskContent = taskContent.replace(/^(?:create|add|new|make)\s+(?:a\s+)?(?:task\s+)?/i, '').trim();
   taskContent = taskContent.replace(/^task\s+/i, '').trim();
   
