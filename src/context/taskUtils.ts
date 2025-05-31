@@ -1,4 +1,3 @@
-
 import { Message, TodoistTask } from "../types";
 import todoistApi from "../services/todoist-api";
 
@@ -296,7 +295,7 @@ export const handleTaskCreationIntent = async (
   }
 };
 
-// Enhanced function to parse task details from content and user message
+// Simplified function to parse task details - now passes due dates directly to Todoist
 function parseTaskDetails(taskContent: string, userMessage: string): {
   cleanContent: string;
   dueDate: string | undefined;
@@ -308,16 +307,10 @@ function parseTaskDetails(taskContent: string, userMessage: string): {
   let priority = 1; // Default priority (lowest in Todoist API)
   let labels: string[] = [];
 
-  // Extract due date from task content or user message - improved patterns
+  // Extract due date phrase from task content or user message - simplified patterns
   const dueDatePatterns = [
-    /due\s+(next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))/i,
-    /due\s+(tomorrow|today)/i,
-    /due\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
-    /due\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?/i,
-    /due\s+(\d{1,2}\/\d{1,2}\/\d{4})/i,
-    /due\s+(\d{1,2}\/\d{1,2})/i,
-    /due\s+(\d{4}-\d{2}-\d{2})/i,
-    /due\s+(.*?)(?:\s|$)/i // Catch-all for other due date formats
+    /due\s+(.*?)(?:\s+with|\s+label|\s*$)/i, // Match "due X" until next keyword or end
+    /due\s+(.*?)(?:\s|$)/i // Fallback: match "due X" until space or end
   ];
 
   // Check task content first
@@ -326,8 +319,8 @@ function parseTaskDetails(taskContent: string, userMessage: string): {
     if (match) {
       dueDate = match[1].trim();
       // Remove the due date part from task content
-      cleanContent = taskContent.replace(match[0], '').trim();
-      console.log(`📅 Due date extracted from task content: "${dueDate}"`);
+      cleanContent = taskContent.replace(/due\s+.*?(?=\s+with|\s+label|$)/i, '').trim();
+      console.log(`📅 Due date phrase extracted from task content: "${dueDate}"`);
       break;
     }
   }
@@ -338,13 +331,13 @@ function parseTaskDetails(taskContent: string, userMessage: string): {
       const match = userMessage.match(pattern);
       if (match) {
         dueDate = match[1].trim();
-        console.log(`📅 Due date extracted from user message: "${dueDate}"`);
+        console.log(`📅 Due date phrase extracted from user message: "${dueDate}"`);
         break;
       }
     }
   }
 
-  // FIXED: Priority mapping - P1=highest priority (4), P4=lowest priority (1)
+  // Priority mapping - P1=highest priority (4), P4=lowest priority (1)
   const priorityPatterns = [
     { pattern: /\b(urgent|critical|asap|immediately|high.priority|p1)\b/i, priority: 4 }, // Highest priority
     { pattern: /\b(important|high|p2)\b/i, priority: 3 },
@@ -362,10 +355,10 @@ function parseTaskDetails(taskContent: string, userMessage: string): {
     }
   }
 
-  // FIXED: Enhanced label extraction and processing
+  // Enhanced label extraction and processing
   const labelPatterns = [
-    /with\s+labels?\s+([\w\s,]+?)(?:\s|$)/i,
-    /labels?\s+([\w\s,]+?)(?:\s|$)/i
+    /with\s+labels?\s+([\w\s,\-&]+?)(?:\s+due|\s*$)/i,
+    /labels?\s+([\w\s,\-&]+?)(?:\s+due|\s*$)/i
   ];
 
   for (const pattern of labelPatterns) {
@@ -390,14 +383,14 @@ function parseTaskDetails(taskContent: string, userMessage: string): {
 
   console.log(`📋 Final parsed details:`, {
     cleanContent,
-    dueDate,
+    dueDate: dueDate ? `"${dueDate}" (will be passed directly to Todoist)` : undefined,
     priority: `${priority} (${priority === 4 ? 'P1-Highest' : priority === 3 ? 'P2-High' : priority === 2 ? 'P3-Medium' : 'P4-Low'})`,
     labels
   });
 
   return {
     cleanContent,
-    dueDate,
+    dueDate, // Pass the raw phrase directly to Todoist
     priority,
     labels
   };
