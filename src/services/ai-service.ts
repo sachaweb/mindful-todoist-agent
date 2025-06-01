@@ -211,6 +211,15 @@ export class AiService {
     return data.response;
   }
 
+  private buildConversationHistory(): Array<{ role: string; content: string }> {
+    return this.context.recentMessages
+      .slice(-5) // Keep last 5 messages for context
+      .map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      }));
+  }
+
   private buildConversationalPrompt(tasks: TodoistTask[]): string {
     const taskList = tasks.length > 0 
       ? tasks.map(t => `- ${t.content}${t.due ? ` (due: ${t.due.string || t.due.date})` : ''} [Priority: ${t.priority}]`).join('\n')
