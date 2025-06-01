@@ -10,8 +10,8 @@ import React, {
 import { Message, TodoistTask } from "../types";
 import { useMessageHandler } from "@/hooks/useMessageHandler";
 import { useTodoistOperations } from "@/hooks/useTodoistOperations";
-import { useTaskOperations } from "@/hooks/useTaskOperations";
 import aiService from "../services/ai-service";
+import { logger } from "../utils/logger";
 
 interface TodoistAgentContextProps {
   messages: Message[];
@@ -38,14 +38,13 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({
 }) => {
   const { messages, suggestions, addMessage, setMessages, generateSuggestions, initializeMessages } = useMessageHandler();
   const { isLoading, setIsLoading, apiKeySet, setApiKey, refreshTasks, createTask, completeTask, tasks } = useTodoistOperations();
-  const { processUserInput, isProcessing } = useTaskOperations();
   
   const isInitialized = useRef(false);
 
   // Initialize only once
   useEffect(() => {
     if (!isInitialized.current) {
-      console.log("Initializing TodoistAgentProvider...");
+      logger.info('TODOIST_CONTEXT', 'Initializing TodoistAgentProvider with intent-based architecture');
       isInitialized.current = true;
       initializeMessages();
       refreshTasks();
@@ -60,12 +59,12 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({
   }, [tasks, generateSuggestions]);
 
   const sendMessage = useCallback(async (content: string) => {
-    if (isLoading || isProcessing) {
-      console.log("Already processing, ignoring new message");
+    if (isLoading) {
+      logger.warn('TODOIST_CONTEXT', 'Already processing, ignoring new message');
       return;
     }
 
-    console.log("TodoistAgentProvider - sendMessage called with:", content);
+    logger.info('TODOIST_CONTEXT', 'Processing message with new intent architecture', { content });
 
     const userMessageId = Math.random().toString(36).substring(2, 11);
     const aiMessageId = Math.random().toString(36).substring(2, 11);
@@ -79,57 +78,136 @@ export const TodoistAgentProvider: React.FC<TodoistAgentProviderProps> = ({
     };
     addMessage(userMessage);
 
-    // Check if this is a task operation first
-    try {
-      await processUserInput(content, tasks, addMessage, createTask);
-    } catch (error) {
-      console.error("Error processing task operation:", error);
-      
-      // Fall back to AI service for non-task messages
-      setIsLoading(true);
-      
-      const aiMessage: Message = {
-        id: aiMessageId,
-        content: "Thinking...",
-        role: "assistant",
-        timestamp: new Date(),
-        status: "sending",
-      };
-      addMessage(aiMessage);
+    setIsLoading(true);
+    
+    // Add thinking message
+    const thinkingMessage: Message = {
+      id: aiMessageId,
+      content: "Analyzing your request...",
+      role: "assistant",
+      timestamp: new Date(),
+      status: "sending",
+    };
+    addMessage(thinkingMessage);
 
-      try {
-        const aiResponse = await aiService.processMessage(content, tasks);
-        
-        setMessages(prevMessages => 
-          prevMessages.map(msg => 
-            msg.id === aiMessageId 
-              ? { ...msg, content: aiResponse, status: undefined }
-              : msg
-          )
-        );
-      } catch (aiError) {
-        console.error("Error in AI service:", aiError);
-        setMessages(prevMessages =>
-          prevMessages.map(msg =>
-            msg.id === aiMessageId
-              ? {
+    try {
+      // Process message through new intent-based architecture
+      const result = await aiService.processMessage(content, tasks);
+      
+      logger.info('TODOIST_CONTEXT', 'AI processing complete', {
+        hasIntent: !!result.intent,
+        requiresTaskAction: result.requiresTaskAction,
+        intentAction: result.intent?.action
+      });
+
+      // Update the AI message with the response
+      setMessages(prevMessages => 
+        prevMessages.map(msg => 
+          msg.id === aiMessageId 
+            ? { ...msg, content: result.response, status: undefined }
+            : msg
+        )
+      );
+
+      // Handle task actions if required
+      if (result.requiresTaskAction && result.intent) {
+        await handleTaskAction(result.intent, addMessage, createTask);
+      }
+
+    } catch (error) {
+      logger.error('TODOIST_CONTEXT', 'Error processing message', error);
+      
+      setMessages(prevMessages =>
+        prevMessages.map(msg =>
+          msg.id === aiMessageId
+            ? {
                 ...msg,
-                content: "Sorry, I encountered an error. Please try again.",
+                content: "Sorry, I encountered an error processing your request. Please try again.",
                 status: "error",
               }
-              : msg
-          )
-        );
-      } finally {
-        setIsLoading(false);
-      }
+            : msg
+        )
+      );
+    } finally {
+      setIsLoading(false);
     }
-  }, [isLoading, isProcessing, addMessage, tasks, createTask, setMessages, setIsLoading, processUserInput]);
+  }, [isLoading, addMessage, tasks, createTask, setMessages, setIsLoading]);
+
+  const handleTaskAction = async (
+    intent: any,
+    addMessage: (message: Message) => void,
+    createTask: (content: string, due?: string, priority?: number, labels?: string[]) => Promise<boolean>
+  ): Promise<void> => {
+    try {
+      // Process the intent through AI service to get sanitized Todoist data
+      const todoistData = await aiService.processIntent(intent, tasks);
+      
+      if (todoistData.action === 'create') {
+        logger.info('TODOIST_CONTEXT', 'Creating single task from intent', todoistData);
+        
+        const success = await createTask(
+          todoistData.content,
+          todoistData.due_string,
+          todoistData.priority,
+          todoistData.labels
+        );
+
+        const resultMessage: Message = {
+          id: Math.random().toString(36).substring(2, 11),
+          content: success 
+            ? `✅ Task "${todoistData.content}" created successfully!`
+            : `❌ Failed to create task "${todoistData.content}". Please try again.`,
+          role: "assistant",
+          timestamp: new Date(),
+        };
+        addMessage(resultMessage);
+      }
+
+      if (todoistData.action === 'create_multiple') {
+        logger.info('TODOIST_CONTEXT', 'Creating multiple tasks from intent', {
+          taskCount: todoistData.tasks.length
+        });
+        
+        let successCount = 0;
+        
+        for (const task of todoistData.tasks) {
+          const success = await createTask(
+            task.content,
+            task.due_string,
+            task.priority,
+            task.labels
+          );
+          if (success) successCount++;
+        }
+
+        const resultMessage: Message = {
+          id: Math.random().toString(36).substring(2, 11),
+          content: successCount === todoistData.tasks.length
+            ? `✅ Successfully created all ${todoistData.tasks.length} tasks!`
+            : `⚠️ Created ${successCount} out of ${todoistData.tasks.length} tasks. Some failed to create.`,
+          role: "assistant",
+          timestamp: new Date(),
+        };
+        addMessage(resultMessage);
+      }
+
+    } catch (error) {
+      logger.error('TODOIST_CONTEXT', 'Error handling task action', error);
+      
+      const errorMessage: Message = {
+        id: Math.random().toString(36).substring(2, 11),
+        content: "❌ Error processing task action. Please try again.",
+        role: "assistant",
+        timestamp: new Date(),
+      };
+      addMessage(errorMessage);
+    }
+  };
 
   const value: TodoistAgentContextProps = {
     messages,
     suggestions,
-    isLoading: isLoading || isProcessing,
+    isLoading,
     apiKeySet,
     tasks,
     setApiKey,
