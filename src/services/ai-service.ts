@@ -1,6 +1,8 @@
 
 import { Message, TodoistTask, ConversationContext } from "../types";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "../utils/logger";
+import { validateUserInput } from "../utils/validators";
 
 export class AiService {
   private readonly MAX_CONTEXT_MESSAGES = 10;
@@ -12,6 +14,7 @@ export class AiService {
 
   constructor() {
     this.loadContext();
+    logger.info('AI_SERVICE', 'AiService initialized');
   }
 
   public hasApiKey(): boolean {
@@ -21,29 +24,39 @@ export class AiService {
 
   public setApiKey(apiKey: string): void {
     // API key is now managed in Supabase secrets, so this is a no-op
-    console.log("API key management is now handled by Edge Function");
+    logger.info('AI_SERVICE', 'API key management is now handled by Edge Function');
   }
 
   public async processMessage(message: string, tasks: TodoistTask[] = []): Promise<string> {
-    console.log("AI service processing message:", message);
+    logger.logUserInput(message);
+    
+    // Validate user input
+    const inputValidation = validateUserInput({ input: message });
+    if (!inputValidation.success) {
+      logger.error('AI_SERVICE', 'Invalid user input', inputValidation.errors);
+      return "I'm sorry, but your message couldn't be processed. Please try rephrasing it.";
+    }
+
+    const validatedInput = inputValidation.data!.input;
+    logger.info('AI_SERVICE', 'Processing validated message', { original: message, validated: validatedInput });
     
     // Add user message to context
     this.addMessageToContext({
       id: this.generateId(),
-      content: message,
+      content: validatedInput,
       role: "user",
       timestamp: new Date(),
     });
 
     // Update tasks in context - use current tasks only, don't carry over
     this.context.openTasks = [...tasks]; // Create fresh copy
-    this.context.lastQuery = message;
+    this.context.lastQuery = validatedInput;
     this.saveContext();
 
     try {
       // Generate response using Claude proxy
-      const response = await this.generateClaudeResponse(message, tasks);
-      console.log("Claude response:", response);
+      const response = await this.generateClaudeResponse(validatedInput, tasks);
+      logger.info('AI_SERVICE', 'Claude response received', { response });
 
       // Add AI response to context
       this.addMessageToContext({
@@ -56,7 +69,7 @@ export class AiService {
       this.saveContext();
       return response;
     } catch (error) {
-      console.error("Error in processMessage:", error);
+      logger.error('AI_SERVICE', 'Error in processMessage', error);
       return "I'm having trouble connecting to the AI service right now. Please try again.";
     }
   }
@@ -65,7 +78,13 @@ export class AiService {
     const systemPrompt = this.buildSystemPrompt(tasks);
     const conversationHistory = this.buildConversationHistory();
 
-    console.log("Calling Claude proxy Edge Function");
+    logger.logClaudeRequest({
+      message,
+      tasksCount: tasks.length,
+      systemPromptLength: systemPrompt.length,
+      conversationHistoryLength: conversationHistory.length
+    });
+
     const { data, error } = await supabase.functions.invoke('claude-proxy', {
       body: {
         message,
@@ -76,15 +95,16 @@ export class AiService {
     });
 
     if (error) {
-      console.error("Edge Function error:", error);
+      logger.error('AI_SERVICE', 'Edge Function error', error);
       throw new Error(`Edge Function error: ${error.message}`);
     }
 
     if (!data.success) {
-      console.error("Claude proxy error:", data.error);
+      logger.error('AI_SERVICE', 'Claude proxy error', data.error);
       throw new Error(`Claude API error: ${data.error}`);
     }
 
+    logger.logClaudeResponse(data);
     return data.response;
   }
 
@@ -169,7 +189,7 @@ Keep responses concise but friendly.`;
   }
 
   private addMessageToContext(message: Message): void {
-    console.log("Adding message to context:", message);
+    logger.debug('AI_SERVICE', 'Adding message to context', message);
     this.context.recentMessages.push(message);
     
     if (this.context.recentMessages.length > this.MAX_CONTEXT_MESSAGES) {
@@ -187,9 +207,9 @@ Keep responses concise but friendly.`;
         lastQuery: this.context.lastQuery,
         taskCreationState: this.context.taskCreationState,
       }));
-      console.log("Context saved successfully");
+      logger.debug('AI_SERVICE', 'Context saved successfully');
     } catch (error) {
-      console.error("Error saving context:", error);
+      logger.error('AI_SERVICE', 'Error saving context', error);
     }
   }
 
@@ -210,10 +230,10 @@ Keep responses concise but friendly.`;
           ...parsedContext,
           openTasks: [],
         };
-        console.log("Context loaded successfully:", this.context);
+        logger.debug('AI_SERVICE', 'Context loaded successfully', this.context);
       }
     } catch (error) {
-      console.error("Error loading context:", error);
+      logger.error('AI_SERVICE', 'Error loading context', error);
     }
   }
 

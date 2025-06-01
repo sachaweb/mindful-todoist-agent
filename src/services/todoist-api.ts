@@ -1,6 +1,8 @@
-
 import { TodoistTask, TodoistApiResponse } from "../types";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "../utils/logger";
+import { validateTask, validateTaskUpdate, validateTodoistResponse, ValidationResult } from "../utils/validators";
+import { TaskInput, TaskUpdateInput } from "../schemas/taskSchemas";
 
 export class TodoistApi {
   private apiKeySet: boolean = true; // Always true since we use Edge Function
@@ -10,7 +12,7 @@ export class TodoistApi {
   private isProcessingQueue: boolean = false;
 
   constructor() {
-    // No need to manage API key locally anymore
+    logger.info('TODOIST_API', 'TodoistApi initialized');
   }
 
   private async processQueue(): Promise<void> {
@@ -70,7 +72,7 @@ export class TodoistApi {
   public async getTasks(filter?: string): Promise<TodoistApiResponse> {
     return this.queueRequest(async () => {
       try {
-        console.log("Calling Edge Function to get tasks with filter:", filter);
+        logger.logTodoistCall('getTasks', { filter });
         
         const { data, error } = await supabase.functions.invoke('todoist-proxy', {
           body: { 
@@ -80,15 +82,21 @@ export class TodoistApi {
         });
 
         if (error) {
-          console.error("Edge Function error:", error);
+          logger.error('TODOIST_API', 'Edge Function error', error);
           return { success: false, error: error.message };
         }
 
+        const validationResult = validateTodoistResponse(data);
+        if (!validationResult.success) {
+          logger.error('TODOIST_API', 'Invalid response format', validationResult.errors);
+          return { success: false, error: 'Invalid response format from Todoist API' };
+        }
+
         if (data.success) {
-          console.log("Successfully fetched tasks via Edge Function:", data.data);
+          logger.logTodoistResponse('getTasks', data);
           return { success: true, data: data.data };
         } else {
-          console.error("Todoist API error:", data.error);
+          logger.error('TODOIST_API', 'Todoist API error', data.error);
           
           if (data.error && data.error.includes('429')) {
             return { success: false, error: "Rate limited by Todoist. Please wait a moment before trying again." };
@@ -97,7 +105,7 @@ export class TodoistApi {
           return { success: false, error: data.error };
         }
       } catch (error) {
-        console.error("Error calling Edge Function:", error);
+        logger.error('TODOIST_API', 'Error calling Edge Function', error);
         return {
           success: false,
           error: error instanceof Error ? error.message : "Unknown error",
@@ -109,30 +117,53 @@ export class TodoistApi {
   public async createTask(content: string, due?: string, priority?: number, labels?: string[]): Promise<TodoistApiResponse> {
     return this.queueRequest(async () => {
       try {
-        console.log("Creating task via Edge Function:", { content, due, priority, labels });
+        // Validate input before making API call
+        const taskValidation = validateTask({
+          content,
+          due_string: due,
+          priority,
+          labels
+        });
+
+        if (!taskValidation.success) {
+          logger.error('TODOIST_API', 'Task validation failed', taskValidation.errors);
+          return { 
+            success: false, 
+            error: `Invalid task data: ${taskValidation.errors?.map(e => e.message).join(', ')}` 
+          };
+        }
+
+        const validatedTask = taskValidation.data!;
+        logger.logTodoistCall('createTask', validatedTask);
 
         const { data, error } = await supabase.functions.invoke('todoist-proxy', {
           body: { 
             action: 'createTask', 
             data: { 
-              content, 
-              due_string: due, 
-              priority, 
-              labels 
+              content: validatedTask.content, 
+              due_string: validatedTask.due_string, 
+              priority: validatedTask.priority, 
+              labels: validatedTask.labels 
             } 
           }
         });
 
         if (error) {
-          console.error("Edge Function error:", error);
+          logger.error('TODOIST_API', 'Edge Function error', error);
           return { success: false, error: error.message };
         }
 
+        const responseValidation = validateTodoistResponse(data);
+        if (!responseValidation.success) {
+          logger.error('TODOIST_API', 'Invalid create response format', responseValidation.errors);
+          return { success: false, error: 'Invalid response format from Todoist API' };
+        }
+
         if (data.success) {
-          console.log("Successfully created task via Edge Function:", data.data);
+          logger.logTodoistResponse('createTask', data);
           return { success: true, data: data.data };
         } else {
-          console.error("Todoist API error:", data.error);
+          logger.error('TODOIST_API', 'Todoist API error', data.error);
           
           if (data.error && data.error.includes('429')) {
             return { success: false, error: "Rate limited by Todoist. Please wait a moment before trying again." };
@@ -141,7 +172,7 @@ export class TodoistApi {
           return { success: false, error: data.error };
         }
       } catch (error) {
-        console.error("Error calling Edge Function:", error);
+        logger.error('TODOIST_API', 'Error calling Edge Function', error);
         return {
           success: false,
           error: error instanceof Error ? error.message : "Unknown error",
@@ -153,25 +184,43 @@ export class TodoistApi {
   public async updateTask(taskId: string, updates: any): Promise<TodoistApiResponse> {
     return this.queueRequest(async () => {
       try {
-        console.log("Updating task via Edge Function:", { taskId, updates });
+        // Validate update input
+        const updateValidation = validateTaskUpdate({ taskId, updates });
+        
+        if (!updateValidation.success) {
+          logger.error('TODOIST_API', 'Task update validation failed', updateValidation.errors);
+          return { 
+            success: false, 
+            error: `Invalid update data: ${updateValidation.errors?.map(e => e.message).join(', ')}` 
+          };
+        }
+
+        const validatedUpdate = updateValidation.data!;
+        logger.logTodoistCall('updateTask', validatedUpdate);
 
         const { data, error } = await supabase.functions.invoke('todoist-proxy', {
           body: { 
             action: 'updateTask', 
-            data: { taskId, updates } 
+            data: validatedUpdate
           }
         });
 
         if (error) {
-          console.error("Edge Function error:", error);
+          logger.error('TODOIST_API', 'Edge Function error', error);
           return { success: false, error: error.message };
         }
 
+        const responseValidation = validateTodoistResponse(data);
+        if (!responseValidation.success) {
+          logger.error('TODOIST_API', 'Invalid update response format', responseValidation.errors);
+          return { success: false, error: 'Invalid response format from Todoist API' };
+        }
+
         if (data.success) {
-          console.log("Successfully updated task via Edge Function");
+          logger.logTodoistResponse('updateTask', data);
           return { success: true };
         } else {
-          console.error("Todoist API error:", data.error);
+          logger.error('TODOIST_API', 'Todoist API error', data.error);
           
           if (data.error && data.error.includes('429')) {
             return { success: false, error: "Rate limited by Todoist. Please wait a moment before trying again." };
@@ -180,7 +229,7 @@ export class TodoistApi {
           return { success: false, error: data.error };
         }
       } catch (error) {
-        console.error("Error calling Edge Function:", error);
+        logger.error('TODOIST_API', 'Error calling Edge Function', error);
         return {
           success: false,
           error: error instanceof Error ? error.message : "Unknown error",
@@ -192,7 +241,12 @@ export class TodoistApi {
   public async completeTask(taskId: string): Promise<TodoistApiResponse> {
     return this.queueRequest(async () => {
       try {
-        console.log("Completing task via Edge Function:", taskId);
+        if (!taskId || taskId.trim().length === 0) {
+          logger.error('TODOIST_API', 'Invalid task ID for completion', { taskId });
+          return { success: false, error: 'Task ID is required for completion' };
+        }
+
+        logger.logTodoistCall('completeTask', { taskId });
 
         const { data, error } = await supabase.functions.invoke('todoist-proxy', {
           body: { 
@@ -202,15 +256,21 @@ export class TodoistApi {
         });
 
         if (error) {
-          console.error("Edge Function error:", error);
+          logger.error('TODOIST_API', 'Edge Function error', error);
           return { success: false, error: error.message };
         }
 
+        const responseValidation = validateTodoistResponse(data);
+        if (!responseValidation.success) {
+          logger.error('TODOIST_API', 'Invalid complete response format', responseValidation.errors);
+          return { success: false, error: 'Invalid response format from Todoist API' };
+        }
+
         if (data.success) {
-          console.log("Successfully completed task via Edge Function");
+          logger.logTodoistResponse('completeTask', data);
           return { success: true };
         } else {
-          console.error("Todoist API error:", data.error);
+          logger.error('TODOIST_API', 'Todoist API error', data.error);
           
           if (data.error && data.error.includes('429')) {
             return { success: false, error: "Rate limited by Todoist. Please wait a moment before trying again." };
@@ -219,7 +279,7 @@ export class TodoistApi {
           return { success: false, error: data.error };
         }
       } catch (error) {
-        console.error("Error calling Edge Function:", error);
+        logger.error('TODOIST_API', 'Error calling Edge Function', error);
         return {
           success: false,
           error: error instanceof Error ? error.message : "Unknown error",
@@ -230,6 +290,11 @@ export class TodoistApi {
 
   // Method to search for tasks by content
   public async searchTasks(query: string): Promise<TodoistApiResponse> {
+    if (!query || query.trim().length === 0) {
+      logger.warn('TODOIST_API', 'Empty search query provided');
+      return { success: false, error: 'Search query cannot be empty' };
+    }
+    
     return this.getTasks(query);
   }
 }

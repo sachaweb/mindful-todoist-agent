@@ -3,9 +3,11 @@ import React, { useRef, useEffect } from "react";
 import Message from "./Message";
 import MessageInput from "./MessageInput";
 import Suggestions from "./Suggestions";
+import DebugPanel from "./DebugPanel";
 import { useTodoistAgent } from "../context/TodoistAgentContext";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { logger } from "../utils/logger";
 
 const ChatInterface: React.FC = () => {
   const { messages, isLoading, sendMessage, suggestions } = useTodoistAgent();
@@ -13,7 +15,7 @@ const ChatInterface: React.FC = () => {
   
   // Log messages for debugging
   useEffect(() => {
-    console.log("Current messages in ChatInterface:", messages);
+    logger.debug('CHAT_INTERFACE', 'Messages updated', { count: messages.length });
   }, [messages]);
 
   // Scroll to bottom when messages change
@@ -24,7 +26,7 @@ const ChatInterface: React.FC = () => {
   }, [messages]);
 
   const handleSendMessage = (content: string) => {
-    console.log("ChatInterface - handleSendMessage called with:", content);
+    logger.info('CHAT_INTERFACE', 'User sending message', { content });
     sendMessage(content);
   };
 
@@ -37,7 +39,7 @@ const ChatInterface: React.FC = () => {
   const isSendingMessage = isLoading && messages.some(m => m.status === 'sending');
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
       <ScrollArea className="flex-1 p-4 space-y-4 chat-gradient">
         <div className="flex flex-col">
           {uniqueMessages && uniqueMessages.length > 0 ? (
@@ -67,6 +69,9 @@ const ChatInterface: React.FC = () => {
           placeholder="Ask me about your tasks or type a new task..."
         />
       </div>
+      
+      {/* Debug Panel */}
+      <DebugPanel />
     </div>
   );
 };
