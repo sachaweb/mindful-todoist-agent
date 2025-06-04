@@ -221,12 +221,18 @@ EXTRACTION RULES:
           taskContent: task.content
         });
         
-        return {
+        const mappedTask: any = {
           content: task.content,
-          due_string: task.dueDate || undefined,
-          priority: priorityValue,
-          labels: task.labels || undefined
+          due_string: task.dueDate,
+          labels: task.labels
         };
+
+        // Only add priority if it's a valid number (including 1)
+        if (typeof priorityValue === 'number') {
+          mappedTask.priority = priorityValue;
+        }
+
+        return mappedTask;
       });
 
       return {
@@ -243,13 +249,28 @@ EXTRACTION RULES:
         taskContent: intent.entities.taskContent
       });
 
-      return {
+      const mappedTask: any = {
         action: 'create',
         content: intent.entities.taskContent,
-        due_string: intent.entities.dueDate || undefined,
-        priority: priorityValue,
-        labels: intent.entities.labels || undefined
+        due_string: intent.entities.dueDate,
+        labels: intent.entities.labels
       };
+
+      // Only add priority if it's a valid number (including 1)
+      if (typeof priorityValue === 'number') {
+        mappedTask.priority = priorityValue;
+        logger.info('INTENT_SERVICE', 'Priority added to mapped task', { 
+          priority: priorityValue,
+          taskContent: intent.entities.taskContent
+        });
+      } else {
+        logger.warn('INTENT_SERVICE', 'Priority not added - invalid value', { 
+          priorityValue,
+          originalPriority: intent.entities.priority
+        });
+      }
+
+      return mappedTask;
     }
 
     if (intent.action === 'update') {
