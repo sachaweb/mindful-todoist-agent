@@ -79,6 +79,14 @@ export class AiService {
 
       logger.info('AI_SERVICE', 'Intent analyzed', intent);
 
+      // Log priority specifically if it's a create action
+      if (intent.action === 'create' && 'entities' in intent && intent.entities.priority) {
+        logger.info('AI_SERVICE', 'Task creation intent with priority detected', {
+          priority: intent.entities.priority,
+          taskContent: intent.entities.taskContent
+        });
+      }
+
       // Handle state transitions
       const stateResult = { isConfirmation, isCancel };
       const transitionResult = this.messageProcessor.handleStateTransitions(stateResult, intent);
@@ -95,6 +103,13 @@ export class AiService {
       // For high confidence task intents, return the intent for external handling
       if (intent.confidence > 0.7 && intent.action !== 'none') {
         logger.info('AI_SERVICE', 'High confidence task intent detected, delegating to external handler');
+        
+        // Log the mapped Todoist format for debugging
+        if (intent.action === 'create') {
+          const todoistData = this.intentProcessor.processIntent(intent, tasks);
+          logger.info('AI_SERVICE', 'Mapped intent to Todoist format', await todoistData);
+        }
+        
         return {
           response: this.messageProcessor.generateTaskActionResponse(intent),
           intent,

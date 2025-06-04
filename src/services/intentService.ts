@@ -77,6 +77,13 @@ Analyze user input and return ONLY a valid JSON object with the user's intent.
 
 IMPORTANT: Your response must be ONLY valid JSON - no explanations, no markdown, no additional text.
 
+PRIORITY MAPPING RULES:
+- Extract priority from keywords: urgent/critical/asap/emergency/p1 -> "urgent"
+- high/important/p2 -> "high" 
+- medium/normal/p3 -> "medium"
+- low/p4 -> "low"
+- If no priority specified, leave as null
+
 For single task creation, return:
 {
   "action": "create",
@@ -147,9 +154,9 @@ EXTRACTION RULES:
 - Remove any prefixes like "task:", "create:", "Title:", etc.
 - Extract clean task content without formatting artifacts
 - Parse natural language dates (tomorrow, next friday, etc.)
-- Map priority keywords: urgent/critical/asap -> "urgent", important/high -> "high", normal/medium -> "medium", low -> "low"
-- Extract labels from "with labels X, Y" or similar patterns
-- Set confidence based on clarity of intent (clear commands = 0.9+, ambiguous = 0.5-0.7)`;
+- Extract labels from @label format or "with labels X, Y" patterns
+- Set confidence based on clarity of intent (clear commands = 0.9+, ambiguous = 0.5-0.7)
+- ALWAYS extract priority if any priority keywords are present in the input`;
   }
 
   private buildContextHistory(context: string[]): Array<{ role: string; content: string }> {
@@ -176,6 +183,14 @@ EXTRACTION RULES:
         throw new Error('Invalid intent structure');
       }
 
+      // Log the parsed priority for debugging
+      if (parsed.action === 'create' && parsed.entities?.priority) {
+        logger.info('INTENT_SERVICE', 'Priority extracted from intent', { 
+          priority: parsed.entities.priority,
+          userInput: 'from Claude response'
+        });
+      }
+
       return parsed as IntentResult;
     } catch (error) {
       logger.error('INTENT_SERVICE', 'Failed to parse Claude response', { response, error });
@@ -198,23 +213,41 @@ EXTRACTION RULES:
     logger.debug('INTENT_SERVICE', 'Mapping intent to Todoist format', intent);
 
     if (intent.action === 'create_multiple') {
-      return {
-        action: 'create_multiple',
-        tasks: intent.tasks.map(task => ({
+      const mappedTasks = intent.tasks.map(task => {
+        const priorityValue = this.mapPriorityToTodoist(task.priority);
+        logger.info('INTENT_SERVICE', 'Mapping task priority for multiple tasks', { 
+          originalPriority: task.priority, 
+          mappedPriority: priorityValue,
+          taskContent: task.content
+        });
+        
+        return {
           content: task.content,
           due_string: task.dueDate || undefined,
-          priority: this.mapPriorityToTodoist(task.priority),
+          priority: priorityValue,
           labels: task.labels || undefined
-        }))
+        };
+      });
+
+      return {
+        action: 'create_multiple',
+        tasks: mappedTasks
       };
     }
 
     if (intent.action === 'create') {
+      const priorityValue = this.mapPriorityToTodoist(intent.entities.priority);
+      logger.info('INTENT_SERVICE', 'Mapping task priority for single task', { 
+        originalPriority: intent.entities.priority, 
+        mappedPriority: priorityValue,
+        taskContent: intent.entities.taskContent
+      });
+
       return {
         action: 'create',
         content: intent.entities.taskContent,
         due_string: intent.entities.dueDate || undefined,
-        priority: this.mapPriorityToTodoist(intent.entities.priority),
+        priority: priorityValue,
         labels: intent.entities.labels || undefined
       };
     }
@@ -235,15 +268,26 @@ EXTRACTION RULES:
   }
 
   private mapPriorityToTodoist(priority?: string): number | undefined {
-    if (!priority) return undefined;
-    
-    switch (priority.toLowerCase()) {
-      case 'urgent': return 4;
-      case 'high': return 3;
-      case 'medium': return 2;
-      case 'low': return 1;
-      default: return undefined;
+    if (!priority) {
+      logger.debug('INTENT_SERVICE', 'No priority provided, returning undefined');
+      return undefined;
     }
+    
+    const priorityMap: Record<string, number> = {
+      'urgent': 4,
+      'high': 3,
+      'medium': 2,
+      'low': 1
+    };
+
+    const mappedValue = priorityMap[priority.toLowerCase()];
+    logger.info('INTENT_SERVICE', 'Priority mapping result', { 
+      input: priority, 
+      output: mappedValue,
+      availableKeys: Object.keys(priorityMap)
+    });
+
+    return mappedValue;
   }
 }
 

@@ -117,6 +117,15 @@ export class TodoistApi {
   public async createTask(content: string, due?: string, priority?: number, labels?: string[]): Promise<TodoistApiResponse> {
     return this.queueRequest(async () => {
       try {
+        // Log the priority value being received
+        logger.info('TODOIST_API', 'Creating task with priority', { 
+          content, 
+          due, 
+          priority, 
+          labels,
+          priorityType: typeof priority
+        });
+
         // Validate input before making API call
         const taskValidation = validateTask({
           content,
@@ -134,17 +143,32 @@ export class TodoistApi {
         }
 
         const validatedTask = taskValidation.data!;
+        
+        // Log the validated priority value
+        logger.info('TODOIST_API', 'Validated task data', { 
+          validatedPriority: validatedTask.priority,
+          originalPriority: priority
+        });
+        
         logger.logTodoistCall('createTask', validatedTask);
+
+        const requestBody = { 
+          content: validatedTask.content, 
+          due_string: validatedTask.due_string, 
+          priority: validatedTask.priority, 
+          labels: validatedTask.labels 
+        };
+
+        // Log the exact request body being sent to Todoist
+        logger.info('TODOIST_API', 'Sending request to Todoist API', { 
+          requestBody,
+          priorityBeingSent: requestBody.priority
+        });
 
         const { data, error } = await supabase.functions.invoke('todoist-proxy', {
           body: { 
             action: 'createTask', 
-            data: { 
-              content: validatedTask.content, 
-              due_string: validatedTask.due_string, 
-              priority: validatedTask.priority, 
-              labels: validatedTask.labels 
-            } 
+            data: requestBody
           }
         });
 
@@ -160,6 +184,11 @@ export class TodoistApi {
         }
 
         if (data.success) {
+          // Log the created task to verify priority was set correctly
+          logger.info('TODOIST_API', 'Task created successfully', { 
+            createdTask: data.data,
+            createdTaskPriority: data.data?.priority
+          });
           logger.logTodoistResponse('createTask', data);
           return { success: true, data: data.data };
         } else {
