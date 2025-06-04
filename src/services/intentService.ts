@@ -298,20 +298,22 @@ EXTRACTION RULES:
         });
         
         const mappedTask: any = {
-          content: task.content,
-          due_string: task.dueDate,
-          labels: task.labels
+          content: task.content
         };
 
-        // Only add priority if it's a valid number (including 1)
+        // Add optional fields only if they have values
+        if (task.dueDate) {
+          mappedTask.due_string = task.dueDate;
+        }
+        
+        if (task.labels && task.labels.length > 0) {
+          mappedTask.labels = task.labels;
+        }
+
+        // Add priority if it's a valid number
         if (typeof priorityValue === 'number') {
           mappedTask.priority = priorityValue;
           logger.debug('INTENT_SERVICE', `Priority ${priorityValue} added to task ${index + 1}`);
-        } else {
-          logger.warn('INTENT_SERVICE', `No priority added to task ${index + 1}`, {
-            priorityValue,
-            originalPriority: task.priority
-          });
         }
 
         return mappedTask;
@@ -349,12 +351,19 @@ EXTRACTION RULES:
 
       const mappedTask: any = {
         action: 'create',
-        content: intent.entities.taskContent,
-        due_string: intent.entities.dueDate,
-        labels: intent.entities.labels
+        content: intent.entities.taskContent
       };
 
-      // Only add priority if it's a valid number (including 1)
+      // Add optional fields only if they have values
+      if (intent.entities.dueDate) {
+        mappedTask.due_string = intent.entities.dueDate;
+      }
+      
+      if (intent.entities.labels && intent.entities.labels.length > 0) {
+        mappedTask.labels = intent.entities.labels;
+      }
+
+      // CRITICAL FIX: Always add priority if it's a valid number (including 1)
       if (typeof priorityValue === 'number') {
         mappedTask.priority = priorityValue;
         logger.info('INTENT_SERVICE', 'PRIORITY SUCCESSFULLY MAPPED AND ADDED', { 
@@ -371,14 +380,16 @@ EXTRACTION RULES:
         });
       }
 
-      logger.debug('INTENT_SERVICE', 'Final mapped task object', {
+      logger.info('INTENT_SERVICE', 'FINAL MAPPED TASK OBJECT BEFORE RETURN', {
         mappedTask,
         hasAllFields: {
           content: !!mappedTask.content,
           due_string: mappedTask.due_string !== undefined,
           priority: mappedTask.priority !== undefined,
           labels: mappedTask.labels !== undefined
-        }
+        },
+        priorityValue: mappedTask.priority,
+        priorityPresent: 'priority' in mappedTask
       });
 
       return mappedTask;

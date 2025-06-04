@@ -152,25 +152,39 @@ export class TodoistApi {
           labelsLength: labels?.length
         });
 
-        // Build the task creation input object
+        // Build the task creation input object with explicit logging
         const taskCreationInput: any = {
           content
         };
 
-        // Only add fields if they have values
-        if (due !== undefined && due !== null) {
+        // Only add fields if they have values, with detailed logging
+        if (due !== undefined && due !== null && due.trim() !== '') {
           taskCreationInput.due_string = due;
+          logger.debug('TODOIST_API', 'Added due_string to task input', { due_string: due });
         }
 
-        if (priority !== undefined && priority !== null) {
+        if (priority !== undefined && priority !== null && typeof priority === 'number') {
           taskCreationInput.priority = priority;
+          logger.info('TODOIST_API', 'PRIORITY ADDED TO TASK INPUT', { 
+            priority, 
+            priorityType: typeof priority,
+            priorityValue: priority
+          });
+        } else {
+          logger.warn('TODOIST_API', 'PRIORITY NOT ADDED TO TASK INPUT', { 
+            priority,
+            priorityType: typeof priority,
+            priorityUndefined: priority === undefined,
+            priorityNull: priority === null
+          });
         }
 
-        if (labels !== undefined && labels !== null && labels.length > 0) {
+        if (labels !== undefined && labels !== null && Array.isArray(labels) && labels.length > 0) {
           taskCreationInput.labels = labels;
+          logger.debug('TODOIST_API', 'Added labels to task input', { labels });
         }
 
-        logger.info('TODOIST_API', 'TASK CREATION INPUT OBJECT BUILT', { 
+        logger.info('TODOIST_API', 'COMPLETE TASK CREATION INPUT OBJECT', { 
           taskCreationInput,
           inputFields: {
             content: !!taskCreationInput.content,
@@ -198,24 +212,17 @@ export class TodoistApi {
 
         const validatedTask = taskValidation.data!;
         
-        logger.info('TODOIST_API', 'Task validation passed', { 
+        logger.info('TODOIST_API', 'TASK VALIDATION PASSED - FINAL VALIDATED OBJECT', { 
           validatedTask,
+          validatedFields: {
+            content: !!validatedTask.content,
+            due_string: validatedTask.due_string !== undefined,
+            priority: validatedTask.priority !== undefined,
+            labels: validatedTask.labels !== undefined,
+            priorityValue: validatedTask.priority,
+            priorityType: typeof validatedTask.priority
+          },
           originalInputs: { content, due, priority, labels }
-        });
-
-        // Log the complete API payload being sent to Todoist
-        logger.info('TODOIST_API', 'FULL API PAYLOAD TO TODOIST', { 
-          action: 'createTask',
-          payload: JSON.stringify(validatedTask, null, 2),
-          payloadFields: {
-            content: validatedTask.content,
-            due_string: validatedTask.due_string,
-            priority: validatedTask.priority,
-            labels: validatedTask.labels,
-            contentType: typeof validatedTask.content,
-            priorityType: typeof validatedTask.priority,
-            priorityValue: validatedTask.priority
-          }
         });
 
         const edgeFunctionPayload = { 
@@ -223,7 +230,13 @@ export class TodoistApi {
           data: validatedTask
         };
 
-        logger.debug('TODOIST_API', 'Complete Edge Function payload', edgeFunctionPayload);
+        logger.info('TODOIST_API', 'COMPLETE EDGE FUNCTION PAYLOAD BEING SENT', {
+          edgeFunctionPayload,
+          payloadData: edgeFunctionPayload.data,
+          payloadPriority: edgeFunctionPayload.data.priority,
+          payloadPriorityType: typeof edgeFunctionPayload.data.priority,
+          payloadJSON: JSON.stringify(edgeFunctionPayload, null, 2)
+        });
 
         const { data, error } = await supabase.functions.invoke('todoist-proxy', {
           body: edgeFunctionPayload
