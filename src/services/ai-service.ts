@@ -34,6 +34,7 @@ export class AiService {
     response: string;
     intent?: IntentResult;
     requiresTaskAction?: boolean;
+    createdTask?: TodoistTask;
   }> {
     try {
       logger.info('AI_SERVICE', 'Starting message processing', { 
@@ -126,6 +127,10 @@ export class AiService {
         requiresTaskAction: false
       };
     }
+  }
+
+  public generateDetailedTaskResponse(intent: IntentResult, createdTask?: TodoistTask): string {
+    return this.messageProcessor.generateTaskActionResponse(intent, createdTask);
   }
 
   public analyzeTasks(tasks: TodoistTask[]): string[] {

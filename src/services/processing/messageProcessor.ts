@@ -59,18 +59,21 @@ export class MessageProcessor {
     return intent;
   }
 
-  public generateTaskActionResponse(intent: IntentResult): string {
+  public generateTaskActionResponse(intent: IntentResult, createdTask?: TodoistTask): string {
     switch (intent.action) {
       case 'create':
+        if (createdTask) {
+          return this.formatTaskCreationMessage(createdTask);
+        }
         if ('entities' in intent && intent.entities.taskContent) {
-          return `I'll create a task "${intent.entities.taskContent}".`;
+          return this.formatTaskCreationFromIntent(intent.entities);
         }
         return "I'll create that task for you.";
         
       case 'create_multiple':
         if ('tasks' in intent) {
           const taskList = intent.tasks
-            .map(task => `"${task.content}"`)
+            .map(task => this.formatTaskFromIntentTask(task))
             .join('\n');
           return `I'll create the following ${intent.tasks.length} tasks:\n${taskList}`;
         }
@@ -90,7 +93,109 @@ export class MessageProcessor {
     }
   }
 
-  public handleStateTransitions(stateResult: any, intent: IntentResult): {
+  private formatTaskCreationMessage(task: TodoistTask): string {
+    let message = `Created task: "${task.content}"`;
+    
+    const details: string[] = [];
+    
+    // Add due date if available
+    if (task.due) {
+      if (task.due.string) {
+        details.push(`due ${task.due.string}`);
+      } else if (task.due.date) {
+        const date = new Date(task.due.date);
+        details.push(`due ${date.toLocaleDateString()}`);
+      }
+    }
+    
+    // Add priority if not default (1)
+    if (task.priority > 1) {
+      const priorityMap = { 2: 'P3', 3: 'P2', 4: 'P1' };
+      details.push(priorityMap[task.priority as keyof typeof priorityMap] || `P${5 - task.priority}`);
+    }
+    
+    // Add labels if available
+    if (task.labels && task.labels.length > 0) {
+      const labelText = task.labels.length === 1 
+        ? `label: ${task.labels[0]}` 
+        : `labels: ${task.labels.join(', ')}`;
+      details.push(labelText);
+    }
+    
+    if (details.length > 0) {
+      message += ` (${details.join(', ')})`;
+    }
+    
+    return message;
+  }
+
+  private formatTaskCreationFromIntent(entities: any): string {
+    let message = `I'll create task: "${entities.taskContent}"`;
+    
+    const details: string[] = [];
+    
+    if (entities.dueDate) {
+      details.push(`due ${entities.dueDate}`);
+    }
+    
+    if (entities.priority) {
+      const priorityMap = { 
+        'low': 'P4', 
+        'medium': 'P3', 
+        'high': 'P2', 
+        'urgent': 'P1' 
+      };
+      details.push(priorityMap[entities.priority as keyof typeof priorityMap] || entities.priority);
+    }
+    
+    if (entities.labels && entities.labels.length > 0) {
+      const labelText = entities.labels.length === 1 
+        ? `label: ${entities.labels[0]}` 
+        : `labels: ${entities.labels.join(', ')}`;
+      details.push(labelText);
+    }
+    
+    if (details.length > 0) {
+      message += ` (${details.join(', ')})`;
+    }
+    
+    return message;
+  }
+
+  private formatTaskFromIntentTask(task: any): string {
+    let message = `- "${task.content}"`;
+    
+    const details: string[] = [];
+    
+    if (task.dueDate) {
+      details.push(`due ${task.dueDate}`);
+    }
+    
+    if (task.priority) {
+      const priorityMap = { 
+        'low': 'P4', 
+        'medium': 'P3', 
+        'high': 'P2', 
+        'urgent': 'P1' 
+      };
+      details.push(priorityMap[task.priority as keyof typeof priorityMap] || task.priority);
+    }
+    
+    if (task.labels && task.labels.length > 0) {
+      const labelText = task.labels.length === 1 
+        ? `label: ${task.labels[0]}` 
+        : `labels: ${task.labels.join(', ')}`;
+      details.push(labelText);
+    }
+    
+    if (details.length > 0) {
+      message += ` (${details.join(', ')})`;
+    }
+    
+    return message;
+  }
+
+  public handleStateTransitions(stateResult: any, intent: IntentResult, createdTask?: TodoistTask): {
     response?: string;
     requiresTaskAction: boolean;
   } {
@@ -119,7 +224,7 @@ export class MessageProcessor {
       });
 
       return {
-        response: this.generateTaskActionResponse(intent),
+        response: this.generateTaskActionResponse(intent, createdTask),
         requiresTaskAction: true
       };
     }
