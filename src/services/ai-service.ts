@@ -92,6 +92,16 @@ export class AiService {
         };
       }
 
+      // For high confidence task intents, return the intent for external handling
+      if (intent.confidence > 0.7 && intent.action !== 'none') {
+        logger.info('AI_SERVICE', 'High confidence task intent detected, delegating to external handler');
+        return {
+          response: this.messageProcessor.generateTaskActionResponse(intent),
+          intent,
+          requiresTaskAction: true
+        };
+      }
+
       // For low confidence or non-task intents, fall back to conversational AI
       logger.info('AI_SERVICE', 'Generating conversational response');
       const aiResponse = await this.responseGenerator.generateConversationalResponse(

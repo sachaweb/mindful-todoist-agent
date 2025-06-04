@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import todoistApi from "../services/todoist-api";
@@ -8,6 +7,7 @@ export const useTodoistOperations = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [tasks, setTasks] = useState<TodoistTask[]>([]);
   const [apiKeySet, setApiKeySet] = useState<boolean>(true);
+  const [isCreatingTask, setIsCreatingTask] = useState<boolean>(false);
   const { toast } = useToast();
 
   const setApiKey = async (key: string): Promise<boolean> => {
@@ -127,12 +127,13 @@ export const useTodoistOperations = () => {
   };
 
   const createTask = async (content: string, due?: string, priority?: number, labels?: string[]): Promise<boolean> => {
-    if (isLoading) {
-      console.log("Already loading, skipping task creation");
+    if (isLoading || isCreatingTask) {
+      console.log("Already loading or creating task, skipping duplicate request");
       return false;
     }
     
     setIsLoading(true);
+    setIsCreatingTask(true);
     console.log("Creating task:", { content, due, priority, labels });
     
     try {
@@ -174,6 +175,7 @@ export const useTodoistOperations = () => {
       return false;
     } finally {
       setIsLoading(false);
+      setIsCreatingTask(false);
     }
   };
 
@@ -223,5 +225,6 @@ export const useTodoistOperations = () => {
     refreshTasks,
     createTask,
     completeTask,
+    isCreatingTask,
   };
 };
