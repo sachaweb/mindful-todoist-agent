@@ -96,6 +96,36 @@ export const useTodoistOperations = () => {
     }
   };
 
+  const formatTaskDetailsForConfirmation = (task: TodoistTask): string => {
+    const details: string[] = [];
+    
+    // Add due date if available
+    if (task.due) {
+      if (task.due.string) {
+        details.push(`due ${task.due.string}`);
+      } else if (task.due.date) {
+        const date = new Date(task.due.date);
+        details.push(`due ${date.toLocaleDateString()}`);
+      }
+    }
+    
+    // Add priority if not default (1)
+    if (task.priority > 1) {
+      const priorityMap = { 2: 'P3', 3: 'P2', 4: 'P1' };
+      details.push(priorityMap[task.priority as keyof typeof priorityMap] || `P${5 - task.priority}`);
+    }
+    
+    // Add labels if available
+    if (task.labels && task.labels.length > 0) {
+      const labelText = task.labels.length === 1 
+        ? `label: ${task.labels[0]}` 
+        : `labels: ${task.labels.join(', ')}`;
+      details.push(labelText);
+    }
+    
+    return details.length > 0 ? ` (${details.join(', ')})` : '';
+  };
+
   const createTask = async (content: string, due?: string, priority?: number, labels?: string[]): Promise<boolean> => {
     if (isLoading) {
       console.log("Already loading, skipping task creation");
@@ -112,9 +142,24 @@ export const useTodoistOperations = () => {
       if (response.success) {
         console.log("Task created successfully");
         
+        const createdTask = response.data;
+        
+        // Generate detailed confirmation message
+        let confirmationMessage = `Task "${content}" created successfully!`;
+        if (createdTask) {
+          const details = formatTaskDetailsForConfirmation(createdTask);
+          confirmationMessage = `Task "${createdTask.content}"${details} created successfully!`;
+        }
+        
+        // Show success toast with details
+        toast({
+          title: "Task Created",
+          description: confirmationMessage,
+        });
+        
         // Optimistically add task or refresh
-        if (response.data) {
-          setTasks(prevTasks => [...prevTasks, response.data]);
+        if (createdTask) {
+          setTasks(prevTasks => [...prevTasks, createdTask]);
         } else {
           await refreshTasks();
         }
