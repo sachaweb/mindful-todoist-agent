@@ -163,18 +163,23 @@ export class TodoistApi {
         }
 
         // CRITICAL FIX: Always add priority if it's a valid number (1-4)
+        // Todoist API: 1=P1(urgent/red), 2=P2(high/orange), 3=P3(medium/blue), 4=P4(low/no color)
         if (typeof priority === 'number' && priority >= 1 && priority <= 4) {
           taskCreationInput.priority = priority;
           logger.info('TODOIST_API', 'PRIORITY ADDED TO TASK INPUT', { 
             priority, 
             priorityType: typeof priority,
-            priorityValue: priority
+            priorityValue: priority,
+            todoistDisplay: priority === 1 ? 'P1 (urgent/red)' : 
+                           priority === 2 ? 'P2 (high/orange)' : 
+                           priority === 3 ? 'P3 (medium/blue)' : 
+                           priority === 4 ? 'P4 (low/default)' : 'unknown'
           });
         } else {
           logger.warn('TODOIST_API', 'PRIORITY NOT ADDED - INVALID OR MISSING', { 
             priority,
             priorityType: typeof priority,
-            isValidRange: priority >= 1 && priority <= 4
+            isValidRange: typeof priority === 'number' && priority >= 1 && priority <= 4
           });
         }
 
@@ -222,11 +227,15 @@ export class TodoistApi {
           data: validatedTask
         };
 
-        logger.info('TODOIST_API', 'COMPLETE EDGE FUNCTION PAYLOAD', {
+        logger.info('TODOIST_API', 'COMPLETE EDGE FUNCTION PAYLOAD BEING SENT TO TODOIST', {
           payload: JSON.stringify(edgeFunctionPayload, null, 2),
           dataObject: edgeFunctionPayload.data,
           dataPriority: edgeFunctionPayload.data.priority,
-          dataPriorityType: typeof edgeFunctionPayload.data.priority
+          dataPriorityType: typeof edgeFunctionPayload.data.priority,
+          expectedTodoistDisplay: edgeFunctionPayload.data.priority === 1 ? 'P1 (urgent/red)' : 
+                                  edgeFunctionPayload.data.priority === 2 ? 'P2 (high/orange)' : 
+                                  edgeFunctionPayload.data.priority === 3 ? 'P3 (medium/blue)' : 
+                                  edgeFunctionPayload.data.priority === 4 ? 'P4 (low/default)' : 'unknown'
         });
 
         const { data, error } = await supabase.functions.invoke('todoist-proxy', {
@@ -265,7 +274,11 @@ export class TodoistApi {
             createdTaskId: data.data?.id,
             createdTaskPriority: data.data?.priority,
             createdTaskContent: data.data?.content,
-            createdTaskDue: data.data?.due
+            createdTaskDue: data.data?.due,
+            actualTodoistPriorityDisplay: data.data?.priority === 1 ? 'P1 (urgent/red)' : 
+                                         data.data?.priority === 2 ? 'P2 (high/orange)' : 
+                                         data.data?.priority === 3 ? 'P3 (medium/blue)' : 
+                                         data.data?.priority === 4 ? 'P4 (low/default)' : 'unknown'
           });
           return { success: true, data: data.data };
         } else {

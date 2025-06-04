@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "../utils/logger";
 
@@ -421,11 +420,12 @@ EXTRACTION RULES:
       return undefined;
     }
     
+    // CORRECTED MAPPING: Todoist API expects 1=P1(highest), 2=P2, 3=P3, 4=P4(lowest)
     const priorityMap: Record<string, number> = {
-      'urgent': 1,
-      'high': 2,
-      'medium': 3,
-      'low': 4
+      'urgent': 1,    // P1 - highest priority (red)
+      'high': 2,      // P2 - high priority (orange)  
+      'medium': 3,    // P3 - medium priority (blue)
+      'low': 4        // P4 - lowest priority (no color)
     };
 
     const normalizedPriority = priority.toLowerCase();
@@ -437,7 +437,11 @@ EXTRACTION RULES:
       mappedValue,
       mappedType: typeof mappedValue,
       availableKeys: Object.keys(priorityMap),
-      mappingSuccessful: mappedValue !== undefined
+      mappingSuccessful: mappedValue !== undefined,
+      todoistMeaning: mappedValue === 1 ? 'P1 (urgent)' : 
+                     mappedValue === 2 ? 'P2 (high)' : 
+                     mappedValue === 3 ? 'P3 (medium)' : 
+                     mappedValue === 4 ? 'P4 (low)' : 'unknown'
     });
 
     return mappedValue;
