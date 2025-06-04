@@ -1,8 +1,9 @@
+
 import { TodoistTask, TodoistApiResponse } from "../types";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "../utils/logger";
-import { validateTask, validateTaskUpdate, validateTodoistResponse, ValidationResult } from "../utils/validators";
-import { TaskInput, TaskUpdateInput } from "../schemas/taskSchemas";
+import { validateSingleTaskCreation, validateTaskUpdate, validateTodoistResponse, ValidationResult } from "../utils/validators";
+import { SingleTaskCreationInput, TaskUpdateInput } from "../schemas/taskSchemas";
 
 export class TodoistApi {
   private apiKeySet: boolean = true; // Always true since we use Edge Function
@@ -151,18 +152,43 @@ export class TodoistApi {
           labelsLength: labels?.length
         });
 
-        // Validate input before making API call
-        const taskValidation = validateTask({
-          content,
-          due_string: due,
-          priority,
-          labels
+        // Build the task creation input object
+        const taskCreationInput: any = {
+          content
+        };
+
+        // Only add fields if they have values
+        if (due !== undefined && due !== null) {
+          taskCreationInput.due_string = due;
+        }
+
+        if (priority !== undefined && priority !== null) {
+          taskCreationInput.priority = priority;
+        }
+
+        if (labels !== undefined && labels !== null && labels.length > 0) {
+          taskCreationInput.labels = labels;
+        }
+
+        logger.info('TODOIST_API', 'TASK CREATION INPUT OBJECT BUILT', { 
+          taskCreationInput,
+          inputFields: {
+            content: !!taskCreationInput.content,
+            due_string: taskCreationInput.due_string !== undefined,
+            priority: taskCreationInput.priority !== undefined,
+            labels: taskCreationInput.labels !== undefined,
+            priorityValue: taskCreationInput.priority,
+            priorityType: typeof taskCreationInput.priority
+          }
         });
+
+        // Validate input before making API call
+        const taskValidation = validateSingleTaskCreation(taskCreationInput);
 
         if (!taskValidation.success) {
           logger.error('TODOIST_API', 'Task validation failed in createTask', {
             validationErrors: taskValidation.errors,
-            inputData: { content, due_string: due, priority, labels }
+            inputData: taskCreationInput
           });
           return { 
             success: false, 
@@ -177,31 +203,24 @@ export class TodoistApi {
           originalInputs: { content, due, priority, labels }
         });
 
-        const requestBody = { 
-          content: validatedTask.content, 
-          due_string: validatedTask.due_string, 
-          priority: validatedTask.priority, 
-          labels: validatedTask.labels 
-        };
-
         // Log the complete API payload being sent to Todoist
         logger.info('TODOIST_API', 'FULL API PAYLOAD TO TODOIST', { 
           action: 'createTask',
-          payload: JSON.stringify(requestBody, null, 2),
+          payload: JSON.stringify(validatedTask, null, 2),
           payloadFields: {
-            content: requestBody.content,
-            due_string: requestBody.due_string,
-            priority: requestBody.priority,
-            labels: requestBody.labels,
-            contentType: typeof requestBody.content,
-            priorityType: typeof requestBody.priority,
-            priorityValue: requestBody.priority
+            content: validatedTask.content,
+            due_string: validatedTask.due_string,
+            priority: validatedTask.priority,
+            labels: validatedTask.labels,
+            contentType: typeof validatedTask.content,
+            priorityType: typeof validatedTask.priority,
+            priorityValue: validatedTask.priority
           }
         });
 
         const edgeFunctionPayload = { 
           action: 'createTask', 
-          data: requestBody
+          data: validatedTask
         };
 
         logger.debug('TODOIST_API', 'Complete Edge Function payload', edgeFunctionPayload);
@@ -253,7 +272,7 @@ export class TodoistApi {
             errorMessage: data.error,
             errorType: typeof data.error,
             fullErrorResponse: data,
-            requestPayload: requestBody
+            requestPayload: validatedTask
           });
           
           if (data.error && data.error.includes('429')) {

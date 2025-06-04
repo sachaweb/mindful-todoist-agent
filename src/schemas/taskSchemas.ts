@@ -50,6 +50,19 @@ export const TaskUpdateSchema = z.object({
   })
 });
 
+// Single task creation schema - this is what we actually use
+export const SingleTaskCreationSchema = z.object({
+  content: z.string().min(1, 'Task content cannot be empty'),
+  due_string: z.string().optional(),
+  priority: z.number().int().min(1).max(4).optional(),
+  labels: z.array(z.string()).optional()
+});
+
+// Multiple task creation schema
+export const MultipleTaskCreationSchema = z.object({
+  tasks: z.array(SingleTaskCreationSchema).min(1, 'At least one task is required')
+});
+
 // Todoist API response validation
 export const TodoistTaskResponseSchema = z.object({
   id: z.string(),
@@ -90,6 +103,8 @@ export const UserInputSchema = z.object({
 // Type exports
 export type TaskInput = z.infer<typeof TaskSchema>;
 export type TaskUpdateInput = z.infer<typeof TaskUpdateSchema>;
+export type SingleTaskCreationInput = z.infer<typeof SingleTaskCreationSchema>;
+export type MultipleTaskCreationInput = z.infer<typeof MultipleTaskCreationSchema>;
 export type TodoistTaskResponse = z.infer<typeof TodoistTaskResponseSchema>;
 export type TodoistApiResponse = z.infer<typeof TodoistApiResponseSchema>;
 export type UserInput = z.infer<typeof UserInputSchema>;

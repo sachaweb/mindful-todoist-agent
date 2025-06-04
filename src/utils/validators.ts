@@ -3,11 +3,13 @@ import { z } from 'zod';
 import { 
   TaskSchema, 
   TaskUpdateSchema,
+  SingleTaskCreationSchema,
   UserInputSchema,
   TodoistApiResponseSchema,
   formatValidationErrors,
   type TaskInput,
   type TaskUpdateInput,
+  type SingleTaskCreationInput,
   type UserInput,
   type ValidationError
 } from '../schemas/taskSchemas';
@@ -46,6 +48,30 @@ export class TaskValidator {
       }
       
       logger.error('VALIDATION', 'Unexpected validation error', error);
+      return ValidationResult.failure([{
+        field: 'unknown',
+        message: 'Unexpected validation error',
+        code: 'UNKNOWN_ERROR'
+      }]);
+    }
+  }
+
+  static validateSingleTaskCreation(input: unknown): ValidationResult<SingleTaskCreationInput> {
+    try {
+      logger.debug('VALIDATION', 'Validating single task creation input', input);
+      
+      const result = SingleTaskCreationSchema.parse(input);
+      
+      logger.debug('VALIDATION', 'Single task creation validation successful', result);
+      return ValidationResult.success(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationErrors = formatValidationErrors(error);
+        logger.warn('VALIDATION', 'Single task creation validation failed', validationErrors);
+        return ValidationResult.failure(validationErrors);
+      }
+      
+      logger.error('VALIDATION', 'Unexpected single task creation validation error', error);
       return ValidationResult.failure([{
         field: 'unknown',
         message: 'Unexpected validation error',
@@ -162,20 +188,21 @@ export class TaskValidator {
     due_string?: string;
     priority?: number;
     labels?: string[];
-  }): ValidationResult<TaskInput> {
+  }): ValidationResult<SingleTaskCreationInput> {
     // First sanitize the content
     const sanitizedInput = {
       ...input,
       content: this.sanitizeTaskContent(input.content)
     };
     
-    // Then validate
-    return this.validateTaskInput(sanitizedInput);
+    // Then validate using the single task creation schema
+    return this.validateSingleTaskCreation(sanitizedInput);
   }
 }
 
 // Export convenience functions
 export const validateTask = TaskValidator.validateTaskInput;
+export const validateSingleTaskCreation = TaskValidator.validateSingleTaskCreation;
 export const validateTaskUpdate = TaskValidator.validateTaskUpdate;
 export const validateUserInput = TaskValidator.validateUserInput;
 export const validateTodoistResponse = TaskValidator.validateTodoistResponse;
