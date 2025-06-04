@@ -13,7 +13,7 @@ export class MessageProcessor {
   }> {
     logger.logUserInput(message);
     
-    // Validate user input
+    // Validate user input - fix the parameter structure
     const inputValidation = validateUserInput({ input: message });
     if (!inputValidation.success) {
       logger.error('MESSAGE_PROCESSOR', 'Invalid user input', inputValidation.errors);
