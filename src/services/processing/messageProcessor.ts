@@ -13,8 +13,22 @@ export class MessageProcessor {
   }> {
     logger.logUserInput(message);
     
-    // Validate user input - fix the parameter structure
-    const inputValidation = validateUserInput({ input: message });
+    // Add detailed logging for debugging
+    logger.debug('MESSAGE_PROCESSOR', 'About to validate user input', { 
+      message, 
+      messageType: typeof message,
+      messageLength: message.length 
+    });
+    
+    // Validate user input - pass the string directly, not wrapped in object
+    const inputValidation = validateUserInput(message);
+    
+    logger.debug('MESSAGE_PROCESSOR', 'Validation result', { 
+      success: inputValidation.success,
+      data: inputValidation.data,
+      errors: inputValidation.errors 
+    });
+    
     if (!inputValidation.success) {
       logger.error('MESSAGE_PROCESSOR', 'Invalid user input', inputValidation.errors);
       throw new Error("Invalid user input");

@@ -78,10 +78,15 @@ export class TaskValidator {
     }
   }
 
-  static validateUserInput(input: unknown): ValidationResult<UserInput> {
+  static validateUserInput(input: string): ValidationResult<UserInput> {
     try {
-      logger.debug('VALIDATION', 'Validating user input', input);
+      logger.debug('VALIDATION', 'Validating user input', { 
+        input, 
+        inputType: typeof input,
+        inputLength: input?.length 
+      });
       
+      // The schema expects { input: string }, so we wrap the string
       const result = UserInputSchema.parse({ input });
       
       logger.debug('VALIDATION', 'User input validation successful', result);
@@ -89,7 +94,10 @@ export class TaskValidator {
     } catch (error) {
       if (error instanceof z.ZodError) {
         const validationErrors = formatValidationErrors(error);
-        logger.warn('VALIDATION', 'User input validation failed', validationErrors);
+        logger.warn('VALIDATION', 'User input validation failed', { 
+          input, 
+          validationErrors 
+        });
         return ValidationResult.failure(validationErrors);
       }
       

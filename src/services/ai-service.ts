@@ -36,8 +36,20 @@ export class AiService {
     requiresTaskAction?: boolean;
   }> {
     try {
+      logger.info('AI_SERVICE', 'Starting message processing', { 
+        message, 
+        messageType: typeof message,
+        tasksCount: tasks.length 
+      });
+
       // Process user input
       const { processedInput, isConfirmation, isCancel } = await this.messageProcessor.processUserInput(message);
+      
+      logger.info('AI_SERVICE', 'User input processed successfully', { 
+        processedInput, 
+        isConfirmation, 
+        isCancel 
+      });
       
       // Add user message to context
       this.contextManager.addMessage({
@@ -57,13 +69,21 @@ export class AiService {
         .slice(-5)
         .map(msg => msg.content);
         
+      logger.info('AI_SERVICE', 'About to analyze intent', { 
+        processedInput, 
+        conversationHistoryLength: conversationHistory.length 
+      });
+      
       const intent = await this.messageProcessor.analyzeIntent(processedInput, conversationHistory);
+
+      logger.info('AI_SERVICE', 'Intent analyzed', intent);
 
       // Handle state transitions
       const stateResult = { isConfirmation, isCancel };
       const transitionResult = this.messageProcessor.handleStateTransitions(stateResult, intent);
       
       if (transitionResult.response) {
+        logger.info('AI_SERVICE', 'Returning state transition response', transitionResult);
         return {
           response: transitionResult.response,
           intent,
@@ -72,6 +92,7 @@ export class AiService {
       }
 
       // For low confidence or non-task intents, fall back to conversational AI
+      logger.info('AI_SERVICE', 'Generating conversational response');
       const aiResponse = await this.responseGenerator.generateConversationalResponse(
         processedInput, 
         tasks, 
@@ -94,7 +115,11 @@ export class AiService {
         requiresTaskAction: false
       };
     } catch (error) {
-      logger.error('AI_SERVICE', 'Error in processMessage', error);
+      logger.error('AI_SERVICE', 'Error in processMessage', { 
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        message 
+      });
       
       return {
         response: "I'm having trouble processing your request right now. Please try again.",
