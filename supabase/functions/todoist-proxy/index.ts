@@ -80,9 +80,12 @@ serve(async (req) => {
         const { content, due_string, priority, labels } = data;
         const taskBody: any = { content };
         
+        // CRITICAL FIX: Always add priority if it's a valid number, including 1
         if (due_string) taskBody.due_string = due_string;
-        if (priority) taskBody.priority = priority;
-        if (labels && labels.length > 0) taskBody.labels = labels;
+        if (typeof priority === 'number' && priority >= 1 && priority <= 4) {
+          taskBody.priority = priority;
+        }
+        if (labels && Array.isArray(labels) && labels.length > 0) taskBody.labels = labels;
         
         console.log('✨ CREATE TASK - FULL REQUEST PAYLOAD TO TODOIST:', {
           url: `${TODOIST_API_URL}/tasks`,
@@ -100,7 +103,13 @@ serve(async (req) => {
             labels: !!taskBody.labels
           },
           priorityValue: taskBody.priority,
-          priorityType: typeof taskBody.priority
+          priorityType: typeof taskBody.priority,
+          priorityValidation: {
+            isNumber: typeof priority === 'number',
+            inRange: typeof priority === 'number' && priority >= 1 && priority <= 4,
+            originalPriority: priority,
+            finalPriority: taskBody.priority
+          }
         });
         
         response = await fetch(`${TODOIST_API_URL}/tasks`, {
@@ -120,6 +129,10 @@ serve(async (req) => {
             id: createdTask.id,
             content: createdTask.content,
             priority: createdTask.priority,
+            priorityDisplay: createdTask.priority === 1 ? 'P1 (urgent/red)' :
+                           createdTask.priority === 2 ? 'P2 (high/orange)' :
+                           createdTask.priority === 3 ? 'P3 (medium/blue)' :
+                           createdTask.priority === 4 ? 'P4 (low/default)' : 'unknown',
             due: createdTask.due,
             labels: createdTask.labels,
             fullTask: createdTask
