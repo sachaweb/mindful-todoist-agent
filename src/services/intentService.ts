@@ -274,10 +274,10 @@ EXTRACTION RULES:
     }
     
     const priorityMap: Record<string, number> = {
-      'urgent': 4,
-      'high': 3,
-      'medium': 2,
-      'low': 1
+      'urgent': 1,
+      'high': 2,
+      'medium': 3,
+      'low': 4
     };
 
     const mappedValue = priorityMap[priority.toLowerCase()];
