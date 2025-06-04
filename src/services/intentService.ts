@@ -35,11 +35,22 @@ class IntentService {
   private readonly CONFIDENCE_THRESHOLD = 0.7;
 
   async analyzeIntent(userInput: string, context?: string[]): Promise<IntentResult> {
-    logger.info('INTENT_SERVICE', 'Analyzing user intent', { userInput, contextLength: context?.length });
+    logger.info('INTENT_SERVICE', 'Starting intent analysis', { 
+      userInput, 
+      userInputLength: userInput.length,
+      contextLength: context?.length,
+      timestamp: new Date().toISOString()
+    });
 
     try {
       const systemPrompt = this.buildIntentPrompt();
       const conversationHistory = context ? this.buildContextHistory(context) : [];
+
+      logger.debug('INTENT_SERVICE', 'Prepared Claude request data', {
+        systemPromptLength: systemPrompt.length,
+        conversationHistoryLength: conversationHistory.length,
+        hasContext: !!context
+      });
 
       const { data, error } = await supabase.functions.invoke('claude-proxy', {
         body: {
@@ -51,22 +62,48 @@ class IntentService {
       });
 
       if (error) {
-        logger.error('INTENT_SERVICE', 'Edge Function error', error);
+        logger.error('INTENT_SERVICE', 'Edge Function error in analyzeIntent', {
+          error: error.message,
+          stack: error.stack,
+          code: error.code,
+          userInput
+        });
         return this.createFallbackIntent(userInput);
       }
 
       if (!data.success) {
-        logger.error('INTENT_SERVICE', 'Claude proxy error', data.error);
+        logger.error('INTENT_SERVICE', 'Claude proxy error in analyzeIntent', {
+          claudeError: data.error,
+          userInput,
+          fullResponse: data
+        });
         return this.createFallbackIntent(userInput);
       }
 
+      logger.debug('INTENT_SERVICE', 'Raw Claude response', {
+        response: data.response,
+        responseLength: data.response?.length,
+        responseType: typeof data.response
+      });
+
       // Parse Claude's structured response
       const intent = this.parseClaudeResponse(data.response);
-      logger.info('INTENT_SERVICE', 'Intent analyzed successfully', intent);
+      
+      logger.info('INTENT_SERVICE', 'Intent analysis completed successfully', {
+        intent,
+        action: intent.action,
+        confidence: intent.confidence,
+        extractedEntities: intent.action === 'create' && 'entities' in intent ? intent.entities : 
+                          intent.action === 'create_multiple' ? { taskCount: intent.tasks.length } : {}
+      });
 
       return intent;
     } catch (error) {
-      logger.error('INTENT_SERVICE', 'Error analyzing intent', error);
+      logger.error('INTENT_SERVICE', 'Exception in analyzeIntent', {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        userInput
+      });
       return this.createFallbackIntent(userInput);
     }
   }
@@ -168,12 +205,18 @@ EXTRACTION RULES:
 
   private parseClaudeResponse(response: string): IntentResult {
     try {
+      logger.debug('INTENT_SERVICE', 'Parsing Claude response', {
+        responseLength: response.length,
+        responsePreview: response.substring(0, 200)
+      });
+
       // Clean the response to ensure it's valid JSON
       let cleanResponse = response.trim();
       
       // Remove any markdown formatting
       if (cleanResponse.startsWith('```')) {
         cleanResponse = cleanResponse.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+        logger.debug('INTENT_SERVICE', 'Removed markdown formatting from response');
       }
 
       const parsed = JSON.parse(cleanResponse);
@@ -183,23 +226,45 @@ EXTRACTION RULES:
         throw new Error('Invalid intent structure');
       }
 
-      // Log the parsed priority for debugging
-      if (parsed.action === 'create' && parsed.entities?.priority) {
-        logger.info('INTENT_SERVICE', 'Priority extracted from intent', { 
+      // Log extracted entities with detailed info
+      if (parsed.action === 'create' && parsed.entities) {
+        logger.info('INTENT_SERVICE', 'EXTRACTED ENTITIES FROM INTENT', {
+          taskContent: parsed.entities.taskContent,
+          dueDate: parsed.entities.dueDate,
           priority: parsed.entities.priority,
-          userInput: 'from Claude response'
+          labels: parsed.entities.labels,
+          confidence: parsed.confidence,
+          reasoning: parsed.reasoning
+        });
+      }
+
+      if (parsed.action === 'create_multiple' && parsed.tasks) {
+        logger.info('INTENT_SERVICE', 'EXTRACTED MULTIPLE TASKS FROM INTENT', {
+          taskCount: parsed.tasks.length,
+          tasks: parsed.tasks.map((task: any, index: number) => ({
+            index,
+            content: task.content,
+            dueDate: task.dueDate,
+            priority: task.priority,
+            labels: task.labels
+          })),
+          confidence: parsed.confidence
         });
       }
 
       return parsed as IntentResult;
     } catch (error) {
-      logger.error('INTENT_SERVICE', 'Failed to parse Claude response', { response, error });
+      logger.error('INTENT_SERVICE', 'Failed to parse Claude response', { 
+        response, 
+        error: error instanceof Error ? error.message : error,
+        responseLength: response.length
+      });
       throw error;
     }
   }
 
   private createFallbackIntent(userInput: string): IntentResult {
-    logger.warn('INTENT_SERVICE', 'Creating fallback intent for input', { userInput });
+    logger.warn('INTENT_SERVICE', 'Creating fallback intent due to analysis failure', { userInput });
     
     return {
       action: 'none',
@@ -210,15 +275,26 @@ EXTRACTION RULES:
   }
 
   public mapToTodoistFormat(intent: TaskIntent | MultiTaskIntent): any {
-    logger.debug('INTENT_SERVICE', 'Mapping intent to Todoist format', intent);
+    logger.info('INTENT_SERVICE', 'Starting mapToTodoistFormat', {
+      action: intent.action,
+      confidence: intent.confidence
+    });
 
     if (intent.action === 'create_multiple') {
-      const mappedTasks = intent.tasks.map(task => {
+      logger.debug('INTENT_SERVICE', 'Processing multiple tasks for mapping', {
+        taskCount: intent.tasks.length
+      });
+
+      const mappedTasks = intent.tasks.map((task, index) => {
         const priorityValue = this.mapPriorityToTodoist(task.priority);
-        logger.info('INTENT_SERVICE', 'Mapping task priority for multiple tasks', { 
+        
+        logger.info('INTENT_SERVICE', `Mapping task ${index + 1} priority`, { 
+          taskIndex: index,
           originalPriority: task.priority, 
           mappedPriority: priorityValue,
-          taskContent: task.content
+          taskContent: task.content,
+          dueDate: task.dueDate,
+          labels: task.labels
         });
         
         const mappedTask: any = {
@@ -230,23 +306,45 @@ EXTRACTION RULES:
         // Only add priority if it's a valid number (including 1)
         if (typeof priorityValue === 'number') {
           mappedTask.priority = priorityValue;
+          logger.debug('INTENT_SERVICE', `Priority ${priorityValue} added to task ${index + 1}`);
+        } else {
+          logger.warn('INTENT_SERVICE', `No priority added to task ${index + 1}`, {
+            priorityValue,
+            originalPriority: task.priority
+          });
         }
 
         return mappedTask;
       });
 
-      return {
+      const result = {
         action: 'create_multiple',
         tasks: mappedTasks
       };
+
+      logger.info('INTENT_SERVICE', 'Multiple tasks mapped successfully', {
+        resultTaskCount: mappedTasks.length,
+        mappedTasks: mappedTasks.map((task, index) => ({
+          index,
+          hasPriority: 'priority' in task,
+          priority: task.priority,
+          content: task.content
+        }))
+      });
+
+      return result;
     }
 
     if (intent.action === 'create') {
       const priorityValue = this.mapPriorityToTodoist(intent.entities.priority);
-      logger.info('INTENT_SERVICE', 'Mapping task priority for single task', { 
+      
+      logger.info('INTENT_SERVICE', 'MAPPING SINGLE TASK TO TODOIST FORMAT', { 
         originalPriority: intent.entities.priority, 
         mappedPriority: priorityValue,
-        taskContent: intent.entities.taskContent
+        taskContent: intent.entities.taskContent,
+        dueDate: intent.entities.dueDate,
+        labels: intent.entities.labels,
+        priorityType: typeof priorityValue
       });
 
       const mappedTask: any = {
@@ -259,16 +357,29 @@ EXTRACTION RULES:
       // Only add priority if it's a valid number (including 1)
       if (typeof priorityValue === 'number') {
         mappedTask.priority = priorityValue;
-        logger.info('INTENT_SERVICE', 'Priority added to mapped task', { 
+        logger.info('INTENT_SERVICE', 'PRIORITY SUCCESSFULLY MAPPED AND ADDED', { 
           priority: priorityValue,
-          taskContent: intent.entities.taskContent
+          taskContent: intent.entities.taskContent,
+          finalMappedTask: mappedTask
         });
       } else {
-        logger.warn('INTENT_SERVICE', 'Priority not added - invalid value', { 
+        logger.warn('INTENT_SERVICE', 'PRIORITY NOT ADDED - INVALID VALUE', { 
           priorityValue,
-          originalPriority: intent.entities.priority
+          priorityType: typeof priorityValue,
+          originalPriority: intent.entities.priority,
+          taskContent: intent.entities.taskContent
         });
       }
+
+      logger.debug('INTENT_SERVICE', 'Final mapped task object', {
+        mappedTask,
+        hasAllFields: {
+          content: !!mappedTask.content,
+          due_string: mappedTask.due_string !== undefined,
+          priority: mappedTask.priority !== undefined,
+          labels: mappedTask.labels !== undefined
+        }
+      });
 
       return mappedTask;
     }
@@ -289,6 +400,11 @@ EXTRACTION RULES:
   }
 
   private mapPriorityToTodoist(priority?: string): number | undefined {
+    logger.debug('INTENT_SERVICE', 'Starting priority mapping', { 
+      inputPriority: priority,
+      inputType: typeof priority
+    });
+
     if (!priority) {
       logger.debug('INTENT_SERVICE', 'No priority provided, returning undefined');
       return undefined;
@@ -301,11 +417,16 @@ EXTRACTION RULES:
       'low': 4
     };
 
-    const mappedValue = priorityMap[priority.toLowerCase()];
-    logger.info('INTENT_SERVICE', 'Priority mapping result', { 
-      input: priority, 
-      output: mappedValue,
-      availableKeys: Object.keys(priorityMap)
+    const normalizedPriority = priority.toLowerCase();
+    const mappedValue = priorityMap[normalizedPriority];
+    
+    logger.info('INTENT_SERVICE', 'PRIORITY MAPPING RESULT', { 
+      inputPriority: priority,
+      normalizedPriority,
+      mappedValue,
+      mappedType: typeof mappedValue,
+      availableKeys: Object.keys(priorityMap),
+      mappingSuccessful: mappedValue !== undefined
     });
 
     return mappedValue;

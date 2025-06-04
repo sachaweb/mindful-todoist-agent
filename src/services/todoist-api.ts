@@ -30,7 +30,7 @@ export class TodoistApi {
         
         if (timeSinceLastRequest < this.minRequestInterval) {
           const delay = this.minRequestInterval - timeSinceLastRequest;
-          console.log(`Rate limiting: waiting ${delay}ms before next request`);
+          logger.debug('TODOIST_API', `Rate limiting: waiting ${delay}ms before next request`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
@@ -72,31 +72,51 @@ export class TodoistApi {
   public async getTasks(filter?: string): Promise<TodoistApiResponse> {
     return this.queueRequest(async () => {
       try {
-        logger.logTodoistCall('getTasks', { filter });
+        logger.info('TODOIST_API', 'Starting getTasks request', { filter, hasFilter: !!filter });
         
+        const requestPayload = { 
+          action: 'getTasks',
+          data: filter ? { filter } : {} // Only pass filter if it exists
+        };
+
+        logger.debug('TODOIST_API', 'getTasks request payload', requestPayload);
+
         const { data, error } = await supabase.functions.invoke('todoist-proxy', {
-          body: { 
-            action: 'getTasks',
-            data: filter ? { filter } : {} // Only pass filter if it exists
-          }
+          body: requestPayload
         });
 
         if (error) {
-          logger.error('TODOIST_API', 'Edge Function error', error);
+          logger.error('TODOIST_API', 'Edge Function error in getTasks', { 
+            error: error.message,
+            stack: error.stack,
+            code: error.code
+          });
           return { success: false, error: error.message };
         }
 
+        logger.debug('TODOIST_API', 'Raw Edge Function response for getTasks', data);
+
         const validationResult = validateTodoistResponse(data);
         if (!validationResult.success) {
-          logger.error('TODOIST_API', 'Invalid response format', validationResult.errors);
+          logger.error('TODOIST_API', 'Invalid response format from getTasks', {
+            validationErrors: validationResult.errors,
+            rawResponse: data
+          });
           return { success: false, error: 'Invalid response format from Todoist API' };
         }
 
         if (data.success) {
-          logger.logTodoistResponse('getTasks', data);
+          logger.info('TODOIST_API', 'getTasks completed successfully', { 
+            taskCount: data.data?.length || 0,
+            hasData: !!data.data
+          });
           return { success: true, data: data.data };
         } else {
-          logger.error('TODOIST_API', 'Todoist API error', data.error);
+          logger.error('TODOIST_API', 'Todoist API error in getTasks', {
+            apiError: data.error,
+            errorType: typeof data.error,
+            fullResponse: data
+          });
           
           if (data.error && data.error.includes('429')) {
             return { success: false, error: "Rate limited by Todoist. Please wait a moment before trying again." };
@@ -105,7 +125,11 @@ export class TodoistApi {
           return { success: false, error: data.error };
         }
       } catch (error) {
-        logger.error('TODOIST_API', 'Error calling Edge Function', error);
+        logger.error('TODOIST_API', 'Exception in getTasks', {
+          error: error instanceof Error ? error.message : error,
+          stack: error instanceof Error ? error.stack : undefined,
+          errorType: typeof error
+        });
         return {
           success: false,
           error: error instanceof Error ? error.message : "Unknown error",
@@ -117,13 +141,14 @@ export class TodoistApi {
   public async createTask(content: string, due?: string, priority?: number, labels?: string[]): Promise<TodoistApiResponse> {
     return this.queueRequest(async () => {
       try {
-        // Log the priority value being received
-        logger.info('TODOIST_API', 'Creating task with priority', { 
+        logger.info('TODOIST_API', 'Starting createTask request', { 
           content, 
           due, 
           priority, 
           labels,
-          priorityType: typeof priority
+          priorityType: typeof priority,
+          labelsType: typeof labels,
+          labelsLength: labels?.length
         });
 
         // Validate input before making API call
@@ -135,7 +160,10 @@ export class TodoistApi {
         });
 
         if (!taskValidation.success) {
-          logger.error('TODOIST_API', 'Task validation failed', taskValidation.errors);
+          logger.error('TODOIST_API', 'Task validation failed in createTask', {
+            validationErrors: taskValidation.errors,
+            inputData: { content, due_string: due, priority, labels }
+          });
           return { 
             success: false, 
             error: `Invalid task data: ${taskValidation.errors?.map(e => e.message).join(', ')}` 
@@ -144,13 +172,10 @@ export class TodoistApi {
 
         const validatedTask = taskValidation.data!;
         
-        // Log the validated priority value
-        logger.info('TODOIST_API', 'Validated task data', { 
-          validatedPriority: validatedTask.priority,
-          originalPriority: priority
+        logger.info('TODOIST_API', 'Task validation passed', { 
+          validatedTask,
+          originalInputs: { content, due, priority, labels }
         });
-        
-        logger.logTodoistCall('createTask', validatedTask);
 
         const requestBody = { 
           content: validatedTask.content, 
@@ -159,40 +184,77 @@ export class TodoistApi {
           labels: validatedTask.labels 
         };
 
-        // Log the exact request body being sent to Todoist
-        logger.info('TODOIST_API', 'Sending request to Todoist API', { 
-          requestBody,
-          priorityBeingSent: requestBody.priority
-        });
-
-        const { data, error } = await supabase.functions.invoke('todoist-proxy', {
-          body: { 
-            action: 'createTask', 
-            data: requestBody
+        // Log the complete API payload being sent to Todoist
+        logger.info('TODOIST_API', 'FULL API PAYLOAD TO TODOIST', { 
+          action: 'createTask',
+          payload: JSON.stringify(requestBody, null, 2),
+          payloadFields: {
+            content: requestBody.content,
+            due_string: requestBody.due_string,
+            priority: requestBody.priority,
+            labels: requestBody.labels,
+            contentType: typeof requestBody.content,
+            priorityType: typeof requestBody.priority,
+            priorityValue: requestBody.priority
           }
         });
 
+        const edgeFunctionPayload = { 
+          action: 'createTask', 
+          data: requestBody
+        };
+
+        logger.debug('TODOIST_API', 'Complete Edge Function payload', edgeFunctionPayload);
+
+        const { data, error } = await supabase.functions.invoke('todoist-proxy', {
+          body: edgeFunctionPayload
+        });
+
         if (error) {
-          logger.error('TODOIST_API', 'Edge Function error', error);
+          logger.error('TODOIST_API', 'Edge Function error in createTask', {
+            error: error.message,
+            stack: error.stack,
+            code: error.code,
+            details: error.details
+          });
           return { success: false, error: error.message };
         }
 
+        // Log the complete raw response from Todoist
+        logger.info('TODOIST_API', 'FULL TODOIST API RESPONSE', {
+          rawResponse: JSON.stringify(data, null, 2),
+          responseType: typeof data,
+          success: data?.success,
+          hasData: !!data?.data,
+          hasError: !!data?.error
+        });
+
         const responseValidation = validateTodoistResponse(data);
         if (!responseValidation.success) {
-          logger.error('TODOIST_API', 'Invalid create response format', responseValidation.errors);
+          logger.error('TODOIST_API', 'Invalid create response format', {
+            validationErrors: responseValidation.errors,
+            rawResponse: data
+          });
           return { success: false, error: 'Invalid response format from Todoist API' };
         }
 
         if (data.success) {
-          // Log the created task to verify priority was set correctly
           logger.info('TODOIST_API', 'Task created successfully', { 
             createdTask: data.data,
-            createdTaskPriority: data.data?.priority
+            createdTaskId: data.data?.id,
+            createdTaskPriority: data.data?.priority,
+            createdTaskContent: data.data?.content,
+            createdTaskDue: data.data?.due
           });
-          logger.logTodoistResponse('createTask', data);
           return { success: true, data: data.data };
         } else {
-          logger.error('TODOIST_API', 'Todoist API error', data.error);
+          logger.error('TODOIST_API', 'TODOIST API ERROR DETAILS', {
+            apiError: data.error,
+            errorMessage: data.error,
+            errorType: typeof data.error,
+            fullErrorResponse: data,
+            requestPayload: requestBody
+          });
           
           if (data.error && data.error.includes('429')) {
             return { success: false, error: "Rate limited by Todoist. Please wait a moment before trying again." };
@@ -201,7 +263,12 @@ export class TodoistApi {
           return { success: false, error: data.error };
         }
       } catch (error) {
-        logger.error('TODOIST_API', 'Error calling Edge Function', error);
+        logger.error('TODOIST_API', 'Exception in createTask', {
+          error: error instanceof Error ? error.message : error,
+          stack: error instanceof Error ? error.stack : undefined,
+          errorType: typeof error,
+          inputData: { content, due, priority, labels }
+        });
         return {
           success: false,
           error: error instanceof Error ? error.message : "Unknown error",

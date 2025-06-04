@@ -1,7 +1,9 @@
+
 import { useState } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import todoistApi from "../services/todoist-api";
 import { TodoistTask } from '../types';
+import { logger } from '../utils/logger';
 
 export const useTodoistOperations = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -12,17 +14,19 @@ export const useTodoistOperations = () => {
 
   const setApiKey = async (key: string): Promise<boolean> => {
     if (isLoading) {
-      console.log("Already loading, skipping API key setup");
+      logger.warn('TODOIST_OPERATIONS', 'Already loading, skipping API key setup');
       return false;
     }
     
     setIsLoading(true);
     try {
-      console.log("Testing Todoist connection...");
+      logger.info('TODOIST_OPERATIONS', 'Testing Todoist connection...');
       const response = await todoistApi.getTasks();
       
       if (response.success) {
-        console.log("Todoist connection successful");
+        logger.info('TODOIST_OPERATIONS', 'Todoist connection successful', {
+          taskCount: response.data?.length || 0
+        });
         setApiKeySet(true);
         setTasks(response.data || []);
         
@@ -33,7 +37,9 @@ export const useTodoistOperations = () => {
         
         return true;
       } else {
-        console.error("Todoist connection failed:", response.error);
+        logger.error('TODOIST_OPERATIONS', 'Todoist connection failed', {
+          error: response.error
+        });
         setApiKeySet(false);
         
         toast({
@@ -44,7 +50,9 @@ export const useTodoistOperations = () => {
         return false;
       }
     } catch (error) {
-      console.error("Error testing Todoist connection:", error);
+      logger.error('TODOIST_OPERATIONS', 'Exception during Todoist connection test', {
+        error: error instanceof Error ? error.message : error
+      });
       setApiKeySet(false);
       toast({
         title: "Connection Error",
@@ -59,24 +67,28 @@ export const useTodoistOperations = () => {
 
   const refreshTasks = async (): Promise<void> => {
     if (!todoistApi.hasApiKey() || isLoading) {
-      console.log("Cannot refresh tasks - no API key or already loading");
+      logger.warn('TODOIST_OPERATIONS', 'Cannot refresh tasks - no API key or already loading');
       return;
     }
     
     setIsLoading(true);
     try {
-      console.log("Refreshing tasks from Todoist...");
+      logger.info('TODOIST_OPERATIONS', 'Starting task refresh...');
       const response = await todoistApi.getTasks();
       
       if (response.success) {
         const fetchedTasks = response.data || [];
-        console.log("Successfully refreshed tasks:", fetchedTasks.length, "tasks found");
+        logger.info('TODOIST_OPERATIONS', 'Tasks refreshed successfully', {
+          taskCount: fetchedTasks.length
+        });
         setTasks(fetchedTasks);
       } else {
         throw new Error(response.error || "Failed to fetch tasks");
       }
     } catch (error) {
-      console.error("Error refreshing tasks:", error);
+      logger.error('TODOIST_OPERATIONS', 'Error refreshing tasks', {
+        error: error instanceof Error ? error.message : error
+      });
       
       if (error instanceof Error && error.message.includes('429')) {
         toast({
@@ -128,20 +140,37 @@ export const useTodoistOperations = () => {
 
   const createTask = async (content: string, due?: string, priority?: number, labels?: string[]): Promise<boolean> => {
     if (isLoading || isCreatingTask) {
-      console.log("Already loading or creating task, skipping duplicate request");
+      logger.warn('TODOIST_OPERATIONS', 'Already loading or creating task, skipping duplicate request');
       return false;
     }
     
     setIsLoading(true);
     setIsCreatingTask(true);
-    console.log("Creating task:", { content, due, priority, labels });
+    
+    logger.info('TODOIST_OPERATIONS', 'STARTING TASK CREATION', { 
+      content, 
+      due, 
+      priority, 
+      labels,
+      contentLength: content?.length,
+      priorityType: typeof priority,
+      labelsCount: labels?.length
+    });
     
     try {
       const response = await todoistApi.createTask(content, due, priority, labels);
-      console.log("Create task response:", response);
+      
+      logger.info('TODOIST_OPERATIONS', 'TASK CREATION API RESPONSE', {
+        success: response.success,
+        hasData: !!response.data,
+        error: response.error,
+        response: response
+      });
       
       if (response.success) {
-        console.log("Task created successfully");
+        logger.info('TODOIST_OPERATIONS', 'Task created successfully', {
+          createdTask: response.data
+        });
         
         const createdTask = response.data;
         
@@ -167,11 +196,33 @@ export const useTodoistOperations = () => {
         
         return true;
       } else {
-        console.error("Task creation failed:", response.error);
+        logger.error('TODOIST_OPERATIONS', 'TASK CREATION FAILED', {
+          error: response.error,
+          inputData: { content, due, priority, labels }
+        });
+        
+        // Show detailed error to user
+        toast({
+          title: "Task Creation Failed",
+          description: response.error || "Unknown error occurred",
+          variant: "destructive",
+        });
+        
         return false;
       }
     } catch (error) {
-      console.error("Error creating task:", error);
+      logger.error('TODOIST_OPERATIONS', 'Exception during task creation', {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        inputData: { content, due, priority, labels }
+      });
+      
+      toast({
+        title: "Task Creation Error",
+        description: "An unexpected error occurred while creating the task.",
+        variant: "destructive",
+      });
+      
       return false;
     } finally {
       setIsLoading(false);
@@ -181,13 +232,13 @@ export const useTodoistOperations = () => {
 
   const completeTask = async (taskId: string): Promise<boolean> => {
     if (isLoading) {
-      console.log("Already loading, skipping task completion");
+      logger.warn('TODOIST_OPERATIONS', 'Already loading, skipping task completion');
       return false;
     }
     
     setIsLoading(true);
     try {
-      console.log("Completing task:", taskId);
+      logger.info('TODOIST_OPERATIONS', 'Starting task completion', { taskId });
       
       const taskToComplete = tasks.find(task => task.id === taskId);
       const taskName = taskToComplete?.content || "Task";
@@ -195,7 +246,7 @@ export const useTodoistOperations = () => {
       const response = await todoistApi.completeTask(taskId);
       
       if (response.success) {
-        console.log("Task completed successfully");
+        logger.info('TODOIST_OPERATIONS', 'Task completed successfully', { taskId, taskName });
         setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
         
         toast({
@@ -204,11 +255,17 @@ export const useTodoistOperations = () => {
         });
         return true;
       } else {
-        console.error("Task completion failed:", response.error);
+        logger.error('TODOIST_OPERATIONS', 'Task completion failed', {
+          taskId,
+          error: response.error
+        });
         return false;
       }
     } catch (error) {
-      console.error("Error completing task:", error);
+      logger.error('TODOIST_OPERATIONS', 'Exception during task completion', {
+        error: error instanceof Error ? error.message : error,
+        taskId
+      });
       return false;
     } finally {
       setIsLoading(false);
