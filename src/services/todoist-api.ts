@@ -162,26 +162,23 @@ export class TodoistApi {
           logger.debug('TODOIST_API', 'Added due_string to task input', { due_string: due });
         }
 
-        // CRITICAL FIX: Always add priority if it's a valid number (1-4)
-        // Todoist API: 1=P1(urgent/red), 2=P2(high/orange), 3=P3(medium/blue), 4=P4(low/no color)
+        // ALWAYS include priority as an integer between 1 and 4
+        // Default to 4 (low priority) if not provided or invalid
+        let priorityValue = 4; // Default to low priority
         if (typeof priority === 'number' && priority >= 1 && priority <= 4) {
-          taskCreationInput.priority = priority;
-          logger.info('TODOIST_API', 'PRIORITY ADDED TO TASK INPUT', { 
-            priority, 
-            priorityType: typeof priority,
-            priorityValue: priority,
-            todoistDisplay: priority === 1 ? 'P1 (urgent/red)' : 
-                           priority === 2 ? 'P2 (high/orange)' : 
-                           priority === 3 ? 'P3 (medium/blue)' : 
-                           priority === 4 ? 'P4 (low/default)' : 'unknown'
-          });
-        } else {
-          logger.warn('TODOIST_API', 'PRIORITY NOT ADDED - INVALID OR MISSING', { 
-            priority,
-            priorityType: typeof priority,
-            isValidRange: typeof priority === 'number' && priority >= 1 && priority <= 4
-          });
+          priorityValue = priority;
         }
+        taskCreationInput.priority = priorityValue;
+        
+        logger.info('TODOIST_API', 'PRIORITY ALWAYS INCLUDED IN TASK INPUT', { 
+          originalPriority: priority,
+          finalPriority: priorityValue,
+          priorityType: typeof priorityValue,
+          todoistDisplay: priorityValue === 1 ? 'P1 (urgent/red)' : 
+                         priorityValue === 2 ? 'P2 (high/orange)' : 
+                         priorityValue === 3 ? 'P3 (medium/blue)' : 
+                         priorityValue === 4 ? 'P4 (low/default)' : 'unknown'
+        });
 
         // Add labels if provided
         if (labels && Array.isArray(labels) && labels.length > 0) {
