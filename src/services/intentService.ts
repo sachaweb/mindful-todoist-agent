@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "../utils/logger";
 
@@ -42,6 +41,15 @@ class IntentService {
       timestamp: new Date().toISOString()
     });
 
+    // ENHANCED: Add immediate pattern-based fallback analysis
+    const fallbackIntent = this.analyzeIntentLocally(userInput);
+    logger.info('INTENT_SERVICE', 'Local pattern analysis result', {
+      userInput,
+      fallbackAction: fallbackIntent.action,
+      fallbackConfidence: fallbackIntent.confidence,
+      fallbackEntities: fallbackIntent.action === 'create' && 'entities' in fallbackIntent ? fallbackIntent.entities : null
+    });
+
     try {
       const systemPrompt = this.buildIntentPrompt();
       const conversationHistory = context ? this.buildContextHistory(context) : [];
@@ -68,7 +76,10 @@ class IntentService {
           code: error.code,
           userInput
         });
-        return this.createFallbackIntent(userInput);
+        logger.info('INTENT_SERVICE', 'Using local pattern analysis as fallback due to Edge Function error', {
+          fallbackIntent
+        });
+        return fallbackIntent;
       }
 
       if (!data.success) {
@@ -77,7 +88,10 @@ class IntentService {
           userInput,
           fullResponse: data
         });
-        return this.createFallbackIntent(userInput);
+        logger.info('INTENT_SERVICE', 'Using local pattern analysis as fallback due to Claude error', {
+          fallbackIntent
+        });
+        return fallbackIntent;
       }
 
       logger.debug('INTENT_SERVICE', 'Raw Claude response', {
@@ -104,8 +118,127 @@ class IntentService {
         stack: error instanceof Error ? error.stack : undefined,
         userInput
       });
-      return this.createFallbackIntent(userInput);
+      logger.info('INTENT_SERVICE', 'Using local pattern analysis as fallback due to exception', {
+        fallbackIntent
+      });
+      return fallbackIntent;
     }
+  }
+
+  // NEW: Local pattern-based intent analysis as fallback
+  private analyzeIntentLocally(userInput: string): IntentResult {
+    logger.info('INTENT_SERVICE', 'Starting local pattern analysis', { userInput });
+    
+    const lowerInput = userInput.toLowerCase().trim();
+    
+    // Enhanced task creation patterns
+    const createPatterns = [
+      /^(?:create|add|new|make)\s+(?:a\s+)?(?:new\s+)?(?:task|todo)?\s*:?\s*(.+)/i,
+      /^(?:task|todo)\s*:?\s*(.+)/i,
+      /^(.+)\s+(?:urgent|high|medium|low|p1|p2|p3|p4)$/i,
+      /^(.+)\s+(?:due|on)\s+(.+)/i
+    ];
+
+    let isTaskCreation = false;
+    let taskContent = '';
+    let confidence = 0.1;
+
+    // Check for task creation patterns
+    for (const pattern of createPatterns) {
+      const match = userInput.match(pattern);
+      if (match) {
+        isTaskCreation = true;
+        taskContent = match[1]?.trim() || '';
+        confidence = 0.8;
+        logger.info('INTENT_SERVICE', 'Local pattern match found', {
+          pattern: pattern.toString(),
+          match: match[0],
+          extractedContent: taskContent
+        });
+        break;
+      }
+    }
+
+    if (!isTaskCreation) {
+      logger.info('INTENT_SERVICE', 'No task creation patterns matched locally');
+      return {
+        action: 'none',
+        confidence: 0.1,
+        entities: {},
+        reasoning: 'No task creation patterns detected in local analysis'
+      };
+    }
+
+    // Extract priority
+    let priority: 'low' | 'medium' | 'high' | 'urgent' | undefined;
+    const priorityPatterns = [
+      { pattern: /\b(?:urgent|critical|emergency|asap|p1)\b/i, priority: 'urgent' as const },
+      { pattern: /\b(?:high|important|p2)\b/i, priority: 'high' as const },
+      { pattern: /\b(?:medium|normal|p3)\b/i, priority: 'medium' as const },
+      { pattern: /\b(?:low|p4)\b/i, priority: 'low' as const }
+    ];
+
+    for (const { pattern, priority: priorityValue } of priorityPatterns) {
+      if (pattern.test(userInput)) {
+        priority = priorityValue;
+        taskContent = taskContent.replace(pattern, '').trim();
+        logger.info('INTENT_SERVICE', 'Priority extracted locally', {
+          priority: priorityValue,
+          pattern: pattern.toString(),
+          cleanedContent: taskContent
+        });
+        break;
+      }
+    }
+
+    // Extract due date
+    let dueDate: string | undefined;
+    const dueDatePatterns = [
+      /\b(?:on|due)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+      /\b(?:on|due)\s+(tomorrow|today|next\s+week)\b/i,
+      /\b(?:on|due)\s+(.+?)(?:\s+urgent|\s+high|\s+medium|\s+low|$)/i
+    ];
+
+    for (const pattern of dueDatePatterns) {
+      const match = userInput.match(pattern);
+      if (match) {
+        dueDate = match[1]?.trim();
+        taskContent = taskContent.replace(match[0], '').trim();
+        logger.info('INTENT_SERVICE', 'Due date extracted locally', {
+          dueDate,
+          pattern: pattern.toString(),
+          cleanedContent: taskContent
+        });
+        break;
+      }
+    }
+
+    // Clean up task content
+    taskContent = taskContent
+      .replace(/^(?:create|add|new|make|task|todo)\s*:?\s*/i, '')
+      .replace(/\s+(?:urgent|high|medium|low|p[1-4])$/i, '')
+      .trim();
+
+    const result: IntentResult = {
+      action: 'create',
+      confidence,
+      entities: {
+        taskContent,
+        dueDate,
+        priority
+      },
+      reasoning: 'Local pattern-based analysis detected task creation intent'
+    };
+
+    logger.info('INTENT_SERVICE', 'Local pattern analysis completed', {
+      result,
+      extractedTaskContent: taskContent,
+      extractedDueDate: dueDate,
+      extractedPriority: priority,
+      finalConfidence: confidence
+    });
+
+    return result;
   }
 
   private buildIntentPrompt(): string {

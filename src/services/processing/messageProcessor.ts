@@ -1,4 +1,3 @@
-
 import { TodoistTask } from "../../types";
 import { logger } from "../../utils/logger";
 import { validateUserInput } from "../../utils/validators";
@@ -12,6 +11,12 @@ export class MessageProcessor {
     isCancel: boolean;
   }> {
     logger.logUserInput(message);
+    
+    logger.info('MESSAGE_PROCESSOR', 'STARTING MESSAGE PROCESSING', {
+      originalMessage: message,
+      messageLength: message.length,
+      timestamp: new Date().toISOString()
+    });
     
     // Add detailed logging for debugging
     logger.debug('MESSAGE_PROCESSOR', 'About to validate user input', { 
@@ -43,7 +48,9 @@ export class MessageProcessor {
       original: message, 
       validated: validatedInput,
       processed: stateResult.filteredInput,
-      currentState: conversationState.getCurrentState()
+      currentState: conversationState.getCurrentState(),
+      isConfirmation: stateResult.isConfirmation,
+      isCancel: stateResult.isCancel
     });
 
     return {
@@ -54,9 +61,54 @@ export class MessageProcessor {
   }
 
   public async analyzeIntent(processedInput: string, conversationHistory: string[]): Promise<IntentResult> {
-    const intent = await intentService.analyzeIntent(processedInput, conversationHistory);
-    logger.info('MESSAGE_PROCESSOR', 'Intent analysis complete', intent);
-    return intent;
+    logger.info('MESSAGE_PROCESSOR', 'STARTING INTENT ANALYSIS', {
+      processedInput,
+      inputLength: processedInput.length,
+      historyLength: conversationHistory.length,
+      timestamp: new Date().toISOString()
+    });
+
+    try {
+      const intent = await intentService.analyzeIntent(processedInput, conversationHistory);
+      
+      logger.info('MESSAGE_PROCESSOR', 'INTENT ANALYSIS COMPLETED', {
+        intent,
+        action: intent.action,
+        confidence: intent.confidence,
+        hasTaskContent: intent.action === 'create' && 'entities' in intent ? !!intent.entities.taskContent : false,
+        extractedPriority: intent.action === 'create' && 'entities' in intent ? intent.entities.priority : null,
+        extractedDueDate: intent.action === 'create' && 'entities' in intent ? intent.entities.dueDate : null
+      });
+
+      // Additional validation logging for task creation intents
+      if (intent.action === 'create' && 'entities' in intent) {
+        if (!intent.entities.taskContent || intent.entities.taskContent.trim() === '') {
+          logger.warn('MESSAGE_PROCESSOR', 'TASK CREATION INTENT WITH EMPTY CONTENT', {
+            intent,
+            taskContent: intent.entities.taskContent,
+            inputThatCausedThis: processedInput
+          });
+        } else {
+          logger.info('MESSAGE_PROCESSOR', 'VALID TASK CREATION INTENT DETECTED', {
+            taskContent: intent.entities.taskContent,
+            priority: intent.entities.priority,
+            dueDate: intent.entities.dueDate,
+            confidence: intent.confidence,
+            reasoning: intent.reasoning
+          });
+        }
+      }
+
+      return intent;
+    } catch (error) {
+      logger.error('MESSAGE_PROCESSOR', 'INTENT ANALYSIS FAILED', {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        processedInput,
+        timestamp: new Date().toISOString()
+      });
+      throw error;
+    }
   }
 
   public generateTaskActionResponse(intent: IntentResult, createdTask?: TodoistTask): string {
@@ -199,9 +251,18 @@ export class MessageProcessor {
     response?: string;
     requiresTaskAction: boolean;
   } {
+    logger.info('MESSAGE_PROCESSOR', 'HANDLING STATE TRANSITIONS', {
+      stateResult,
+      intentAction: intent.action,
+      intentConfidence: intent.confidence,
+      isConfirmation: stateResult.isConfirmation,
+      isCancel: stateResult.isCancel
+    });
+
     // Handle state-specific responses
     if (stateResult.isConfirmation) {
       conversationState.transition('processing_task');
+      logger.info('MESSAGE_PROCESSOR', 'Processing confirmation, transitioning to task processing');
       return {
         response: "Processing your confirmation...",
         requiresTaskAction: true
@@ -210,6 +271,7 @@ export class MessageProcessor {
 
     if (stateResult.isCancel) {
       conversationState.reset();
+      logger.info('MESSAGE_PROCESSOR', 'Processing cancellation, resetting conversation state');
       return {
         response: "Task creation cancelled.",
         requiresTaskAction: false
@@ -218,6 +280,12 @@ export class MessageProcessor {
 
     // Check if this is a high-confidence task action
     if (intent.confidence > 0.7 && intent.action !== 'none') {
+      logger.info('MESSAGE_PROCESSOR', 'HIGH CONFIDENCE TASK ACTION DETECTED', {
+        action: intent.action,
+        confidence: intent.confidence,
+        taskContent: intent.action === 'create' && 'entities' in intent ? intent.entities.taskContent : null
+      });
+
       conversationState.transition('processing_task', {
         pendingAction: intent.action,
         metadata: { intent }
@@ -231,9 +299,11 @@ export class MessageProcessor {
 
     // Reset state for non-task interactions
     if (intent.action === 'none') {
+      logger.info('MESSAGE_PROCESSOR', 'Non-task intent detected, resetting conversation state');
       conversationState.reset();
     }
 
+    logger.info('MESSAGE_PROCESSOR', 'No task action required for this message');
     return { requiresTaskAction: false };
   }
 }
