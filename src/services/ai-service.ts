@@ -1,4 +1,3 @@
-
 import { Message, TodoistTask, ConversationContext } from "../types";
 import { logger } from "../utils/logger";
 import { ContextManager } from "./context/contextManager";
@@ -37,16 +36,29 @@ export class AiService {
     createdTask?: TodoistTask;
   }> {
     try {
-      logger.info('AI_SERVICE', 'Starting message processing', { 
+      logger.info('AI_SERVICE', 'MESSAGE RECEIVED IN AI SERVICE - Starting processing pipeline', { 
         message, 
         messageType: typeof message,
-        tasksCount: tasks.length 
+        messageLength: message.length,
+        tasksCount: tasks.length,
+        timestamp: new Date().toISOString()
       });
 
+      // Validate input
+      if (!message || message.trim() === '') {
+        logger.error('AI_SERVICE', 'Empty or invalid message received', { message });
+        return {
+          response: "Please provide a valid message.",
+          requiresTaskAction: false
+        };
+      }
+
       // Process user input
+      logger.info('AI_SERVICE', 'ROUTING TO MESSAGE PROCESSOR for input processing', { message });
       const { processedInput, isConfirmation, isCancel } = await this.messageProcessor.processUserInput(message);
       
-      logger.info('AI_SERVICE', 'User input processed successfully', { 
+      logger.info('AI_SERVICE', 'MESSAGE PROCESSOR completed input processing', { 
+        originalMessage: message,
         processedInput, 
         isConfirmation, 
         isCancel 
@@ -70,20 +82,28 @@ export class AiService {
         .slice(-5)
         .map(msg => msg.content);
         
-      logger.info('AI_SERVICE', 'About to analyze intent', { 
+      logger.info('AI_SERVICE', 'ROUTING TO INTENT ANALYSIS', { 
         processedInput, 
         conversationHistoryLength: conversationHistory.length 
       });
       
       const intent = await this.messageProcessor.analyzeIntent(processedInput, conversationHistory);
 
-      logger.info('AI_SERVICE', 'Intent analyzed', intent);
+      logger.info('AI_SERVICE', 'INTENT ANALYSIS COMPLETED', {
+        originalMessage: message,
+        processedInput,
+        intentAction: intent.action,
+        intentConfidence: intent.confidence,
+        requiresTaskAction: intent.action !== 'none' && intent.confidence > 0.7
+      });
 
       // Log priority specifically if it's a create action
       if (intent.action === 'create' && 'entities' in intent && intent.entities.priority) {
-        logger.info('AI_SERVICE', 'Task creation intent with priority detected', {
+        logger.info('AI_SERVICE', 'TASK CREATION INTENT WITH PRIORITY DETECTED', {
           priority: intent.entities.priority,
-          taskContent: intent.entities.taskContent
+          taskContent: intent.entities.taskContent,
+          dueDate: intent.entities.dueDate,
+          confidence: intent.confidence
         });
       }
 
@@ -92,7 +112,10 @@ export class AiService {
       const transitionResult = this.messageProcessor.handleStateTransitions(stateResult, intent);
       
       if (transitionResult.response) {
-        logger.info('AI_SERVICE', 'Returning state transition response', transitionResult);
+        logger.info('AI_SERVICE', 'STATE TRANSITION RESPONSE generated', {
+          response: transitionResult.response,
+          requiresTaskAction: transitionResult.requiresTaskAction
+        });
         return {
           response: transitionResult.response,
           intent,
@@ -102,12 +125,16 @@ export class AiService {
 
       // For high confidence task intents, return the intent for external handling
       if (intent.confidence > 0.7 && intent.action !== 'none') {
-        logger.info('AI_SERVICE', 'High confidence task intent detected, delegating to external handler');
+        logger.info('AI_SERVICE', 'HIGH CONFIDENCE TASK INTENT - Delegating to external task handler', {
+          action: intent.action,
+          confidence: intent.confidence,
+          willTriggerTaskCreation: true
+        });
         
         // Log the mapped Todoist format for debugging
         if (intent.action === 'create') {
           const todoistData = this.intentProcessor.processIntent(intent, tasks);
-          logger.info('AI_SERVICE', 'Mapped intent to Todoist format', await todoistData);
+          logger.info('AI_SERVICE', 'MAPPED INTENT TO TODOIST FORMAT for task creation', await todoistData);
         }
         
         return {
@@ -118,7 +145,12 @@ export class AiService {
       }
 
       // For low confidence or non-task intents, fall back to conversational AI
-      logger.info('AI_SERVICE', 'Generating conversational response');
+      logger.info('AI_SERVICE', 'LOW CONFIDENCE OR NON-TASK INTENT - Generating conversational response', {
+        action: intent.action,
+        confidence: intent.confidence,
+        fallbackToConversational: true
+      });
+      
       const aiResponse = await this.responseGenerator.generateConversationalResponse(
         processedInput, 
         tasks, 
@@ -135,16 +167,21 @@ export class AiService {
 
       this.contextManager.saveContext();
       
+      logger.info('AI_SERVICE', 'CONVERSATIONAL RESPONSE generated and context updated', {
+        responseLength: aiResponse.length
+      });
+      
       return {
         response: aiResponse,
         intent,
         requiresTaskAction: false
       };
     } catch (error) {
-      logger.error('AI_SERVICE', 'Error in processMessage', { 
+      logger.error('AI_SERVICE', 'CRITICAL ERROR in processMessage pipeline', { 
         error: error instanceof Error ? error.message : error,
         stack: error instanceof Error ? error.stack : undefined,
-        message 
+        originalMessage: message,
+        stage: 'unknown'
       });
       
       return {

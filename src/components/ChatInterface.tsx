@@ -34,18 +34,53 @@ const ChatInterface: React.FC = () => {
         (lastMessage.content.includes('created successfully') || 
          lastMessage.content.includes('SUCCESS: Task') ||
          lastMessage.content.includes('✅ SUCCESS'))) {
-      console.log("Task creation success detected, triggering input clear");
+      logger.info('CHAT_INTERFACE', 'Task creation success detected, triggering input clear', {
+        messageId: lastMessage.id,
+        contentPreview: lastMessage.content.substring(0, 100)
+      });
       setShouldClearInput(true);
     }
   }, [messages]);
 
   const handleSendMessage = (content: string) => {
-    logger.info('CHAT_INTERFACE', 'User sending message', { content });
+    logger.info('CHAT_INTERFACE', 'RECEIVED USER COMMAND - Starting message handling flow', { 
+      content,
+      contentLength: content.length,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Validate input
+    if (!content || content.trim() === '') {
+      logger.warn('CHAT_INTERFACE', 'Empty message received, not processing', { content });
+      return;
+    }
+
+    const trimmedContent = content.trim();
+    logger.info('CHAT_INTERFACE', 'ROUTING MESSAGE TO AI SERVICE for intent recognition', {
+      originalContent: content,
+      trimmedContent,
+      willPassToSendMessage: true
+    });
+
     setShouldClearInput(false); // Reset clear state when sending new message
-    sendMessage(content);
+    
+    try {
+      // Route ALL messages through the AI service for intent recognition
+      sendMessage(trimmedContent);
+      logger.info('CHAT_INTERFACE', 'Message successfully routed to AI service', {
+        content: trimmedContent
+      });
+    } catch (error) {
+      logger.error('CHAT_INTERFACE', 'Failed to route message to AI service', {
+        content: trimmedContent,
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+    }
   };
 
   const handleInputCleared = () => {
+    logger.debug('CHAT_INTERFACE', 'Input cleared after successful task creation');
     setShouldClearInput(false); // Reset the clear flag after input is cleared
   };
 
