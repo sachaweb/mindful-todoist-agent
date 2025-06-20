@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import Message from "./Message";
 import MessageInput from "./MessageInput";
 import Suggestions from "./Suggestions";
@@ -12,6 +12,7 @@ import { logger } from "../utils/logger";
 const ChatInterface: React.FC = () => {
   const { messages, isLoading, sendMessage, suggestions } = useTodoistAgent();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [shouldClearInput, setShouldClearInput] = useState(false);
   
   // Log messages for debugging
   useEffect(() => {
@@ -25,9 +26,27 @@ const ChatInterface: React.FC = () => {
     }
   }, [messages]);
 
+  // Monitor for successful task creation to trigger input clearing
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && 
+        lastMessage.role === 'assistant' && 
+        (lastMessage.content.includes('created successfully') || 
+         lastMessage.content.includes('SUCCESS: Task') ||
+         lastMessage.content.includes('✅ SUCCESS'))) {
+      console.log("Task creation success detected, triggering input clear");
+      setShouldClearInput(true);
+    }
+  }, [messages]);
+
   const handleSendMessage = (content: string) => {
     logger.info('CHAT_INTERFACE', 'User sending message', { content });
+    setShouldClearInput(false); // Reset clear state when sending new message
     sendMessage(content);
+  };
+
+  const handleInputCleared = () => {
+    setShouldClearInput(false); // Reset the clear flag after input is cleared
   };
 
   // Ensure unique messages by ID
@@ -67,6 +86,8 @@ const ChatInterface: React.FC = () => {
           onSendMessage={handleSendMessage}
           isLoading={isSendingMessage}
           placeholder="Ask me about your tasks or type a new task..."
+          shouldClearInput={shouldClearInput}
+          onInputCleared={handleInputCleared}
         />
       </div>
       

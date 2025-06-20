@@ -1,5 +1,5 @@
 
-import React, { useState, FormEvent, KeyboardEvent } from "react";
+import React, { useState, FormEvent, KeyboardEvent, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowUp } from "lucide-react";
@@ -8,22 +8,36 @@ interface MessageInputProps {
   onSendMessage: (message: string) => void;
   isLoading: boolean;
   placeholder?: string;
+  shouldClearInput?: boolean;
+  onInputCleared?: () => void;
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({
   onSendMessage,
   isLoading,
   placeholder = "Type a message...",
+  shouldClearInput = false,
+  onInputCleared,
 }) => {
   const [message, setMessage] = useState("");
+
+  // Clear input when shouldClearInput becomes true
+  useEffect(() => {
+    if (shouldClearInput && message.trim() !== "") {
+      console.log("Clearing input after successful task creation");
+      setMessage("");
+      onInputCleared?.();
+    }
+  }, [shouldClearInput, message, onInputCleared]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (message.trim() && !isLoading) {
       console.log("Submitting message:", message);
       onSendMessage(message.trim());
-      setMessage("");
-      console.log("Message sent, input cleared");
+      // Do NOT clear the message here - it will be cleared by the parent component
+      // when the task is successfully created
+      console.log("Message sent, input NOT cleared (will clear on success)");
     }
   };
 
